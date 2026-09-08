@@ -13,7 +13,7 @@
       <div class="start-card">
         <p class="start-eyebrow">CORRA • COLETE • ATAQUE</p>
         <h1 id="game-title">DINO RUNNER</h1>
-        <p class="start-story">Fuja do clone e use o cubo vermelho para acabar com suas 6 vidas.</p>
+        <p class="start-story">Fuja do Virocrata-19 e use o cubo verde para acabar com suas 6 vidas.</p>
         <div class="start-controls" aria-label="Controles do jogo">
           <span>↑ PULAR</span>
           <span>→ CORRER</span>
@@ -29,9 +29,12 @@
     <section id="game-over-screen" class="start-screen game-over-screen is-hidden"
       aria-labelledby="game-over-title">
       <div class="start-card game-over-card">
-        <p class="start-eyebrow">FIM DE JOGO</p>
-        <h2 id="game-over-title">VOCÊ FOI PEGO!</h2>
-        <p class="start-story">Tente escapar novamente ou escolha outro modo.</p>
+        <p id="result-label" class="start-eyebrow">DERROTA</p>
+        <h2 id="game-over-title">O VIROCRATA-19 TE PEGOU!</h2>
+        <p id="result-message" class="start-story">Tente escapar novamente ou escolha outro modo.</p>
+        <p id="result-score" class="result-score">PONTUAÇÃO: 0</p>
+        <img class="victory-art" src="New%20Piskel%20(12).gif"
+          alt="Animação de vitória: você derrotou o vírus." width="128" height="128">
         <div class="mode-buttons">
           <button id="restart-button" class="play-button" type="button">↻ RECOMEÇAR</button>
           <button id="menu-button" class="play-button menu-button" type="button">⌂ MENU</button>
@@ -40,6 +43,7 @@
     </section>
 
     <div id="offline-resources" jstcache="0">
+    <img id="clone-sprite" src="images/cara-malefico-sprites.png" alt="">
     <img id="custom-ground" src="images/ground.png" alt="">
     <div id="offline-resources-1x" jstcache="0">
       <img id="1x-obstacle-large" src="images/1x-obstacle-large.png" jstcache="0">
@@ -66,6 +70,13 @@
     </template>
   </div>
 </div>
+  <div id="mobile-controls" class="mobile-controls" hidden aria-label="Controles do jogo">
+    <button type="button" class="mobile-control" data-control="jump">↑ PULAR</button>
+    <div class="mobile-actions">
+      <button type="button" class="mobile-control" data-control="run">→ CORRER</button>
+      <button type="button" class="mobile-control" data-control="throw">← LANÇAR</button>
+    </div>
+  </div>
   <script src="game.js"></script>
 </body>
 </html>

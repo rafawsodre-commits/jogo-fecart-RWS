@@ -45,6 +45,8 @@
     this.companionGap = 0;
     this.companionXPos = 2;
     this.companionDrawX = 2;
+    this.cloneAnimationTime = 0;
+    this.cloneSourceX = 0;
     this.clonePressurePoints = 0;
     this.powerUp = null;
     this.hasPowerUp = false;
@@ -59,6 +61,7 @@
     this.cloneDefeated = false;
     this.gameMode = 'normal';
     this.nextPowerUpDistance = 80;
+    this.testCubePending = true;
     this.msPerFrame = 1000 / FPS;
     this.currentSpeed = this.config.SPEED;
     this.obstacles = [];
@@ -142,6 +145,8 @@
     POWER_UP_STUN_DURATION: 2500,
     POWER_UP_BLUE_CHANCE: 0.3,
     POWER_UP_RED_CHANCE: 0.25,
+    // Temporary shortcut for testing the victory screen.
+    TEST_VICTORY_CUBE: false,
     POWER_UP_SLOW_PER_STACK: 0.15,
     POWER_UP_BLUE_FLASH_DURATION: 700,
     CLONE_MAX_HEALTH: 6
@@ -171,6 +176,7 @@
     */
     Runner.imageSources = {
     LDPI: [
+    {name: 'CLONE', id: 'clone-sprite'},
     {name: 'GROUND', id: 'custom-ground'},
     {name: 'CACTUS_LARGE', id: '1x-obstacle-large'},
     {name: 'CACTUS_SMALL', id: '1x-obstacle-small'},
@@ -181,6 +187,7 @@
     {name: 'TREX', id: '1x-trex'}
     ],
     HDPI: [
+    {name: 'CLONE', id: 'clone-sprite'},
     {name: 'GROUND', id: 'custom-ground'},
     {name: 'CACTUS_LARGE', id: '2x-obstacle-large'},
     {name: 'CACTUS_SMALL', id: '2x-obstacle-small'},
@@ -389,7 +396,7 @@
     this.tRex.draw(0, 0);
     }
     // Game over panel.
-    if (this.crashed && this.gameOverPanel) {
+    if (this.crashed && !this.cloneDefeated && this.gameOverPanel) {
     this.gameOverPanel.updateDimensions(this.dimensions.WIDTH);
     this.gameOverPanel.draw();
     }
@@ -475,7 +482,8 @@
     this.clonePressurePoints = Math.max(0, this.clonePressurePoints -
     pointsGained * this.config.CLONE_PRESSURE_RECOVERY);
     if (this.currentSpeed < this.getNormalMaxSpeed()) {
-    this.currentSpeed += this.config.ACCELERATION;
+    this.currentSpeed = Math.min(this.getNormalMaxSpeed(),
+    this.currentSpeed + this.config.ACCELERATION * deltaTime / this.msPerFrame);
     }
     } else {
     // A colisao aumenta a pressao da perseguicao sem alterar o placar.
@@ -513,12 +521,15 @@
     if (this.cloneDefeated) {
     return;
     }
-    var sourceX = this.activated ?
-    this.tRex.currentAnimFrames[this.tRex.currentFrame] : 44;
+    var sourceX = 0;
     if (this.cloneStunRemaining > 0) {
     sourceX = this.cloneFrozenSourceX;
+    } else if (this.activated) {
+    this.cloneAnimationTime = (this.cloneAnimationTime + deltaTime) %
+    (80 * 8);
+    sourceX = Math.floor(this.cloneAnimationTime / 80) * 97;
     }
-    var scale = IS_HIDPI ? 2 : 1;
+    this.cloneSourceX = sourceX;
     var initialX = 2;
     var offscreenX = -Trex.config.WIDTH;
     var offscreenSpeedMultiplier = 1.15;
@@ -564,19 +575,24 @@
     this.gameOver();
     return;
     }
-    this.canvasCtx.drawImage(this.images.TREX, sourceX * scale, 0,
-    Trex.config.WIDTH * scale, Trex.config.HEIGHT * scale,
-    companionX, this.tRex.groundYPos, Trex.config.WIDTH, Trex.config.HEIGHT);
+    var cloneSize = 100;
+    var cloneDrawX = companionX + Trex.config.WIDTH - cloneSize;
+    var cloneDrawY = this.tRex.groundYPos + Trex.config.HEIGHT - cloneSize;
+    this.canvasCtx.save();
+    this.canvasCtx.imageSmoothingEnabled = false;
+    this.canvasCtx.drawImage(this.images.CLONE, sourceX, 0, 97, 97,
+    cloneDrawX, cloneDrawY, cloneSize, cloneSize);
+    this.canvasCtx.restore();
     if (this.cloneStunRemaining > 0) {
     this.canvasCtx.strokeStyle = '#facc15';
     this.canvasCtx.lineWidth = 2;
-    this.canvasCtx.strokeRect(companionX - 2, this.tRex.groundYPos - 2,
-    Trex.config.WIDTH + 4, Trex.config.HEIGHT + 4);
+    this.canvasCtx.strokeRect(cloneDrawX - 2, cloneDrawY - 2,
+    cloneSize + 4, cloneSize + 4);
     } else if (this.cloneBlueFlashRemaining > 0) {
     this.canvasCtx.strokeStyle = '#38bdf8';
     this.canvasCtx.lineWidth = 2;
-    this.canvasCtx.strokeRect(companionX - 2, this.tRex.groundYPos - 2,
-    Trex.config.WIDTH + 4, Trex.config.HEIGHT + 4);
+    this.canvasCtx.strokeRect(cloneDrawX - 2, cloneDrawY - 2,
+    cloneSize + 4, cloneSize + 4);
     }
     // Mantem a barreira totalmente fora da borda esquerda do canvas.
     var barrierX = -10;
@@ -608,6 +624,17 @@
     }
     var size = this.config.POWER_UP_SIZE;
     var distance = this.distanceMeter.getActualDistance(this.distanceRan);
+    if (this.config.TEST_VICTORY_CUBE && this.testCubePending &&
+    this.gameMode === 'normal' && !this.tRex.jumping &&
+    !this.powerUp && !this.hasPowerUp && !this.powerUpProjectile) {
+    this.powerUp = {
+    x: this.tRex.xPos + Trex.config.WIDTH + 24,
+    y: this.tRex.groundYPos + Trex.config.HEIGHT - size,
+    type: 'red',
+    instantKill: true
+    };
+    this.testCubePending = false;
+    }
     if (!this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
     distance >= this.nextPowerUpDistance) {
     var elevated = Math.random() > 0.5;
@@ -635,6 +662,7 @@
     playerTop + Trex.config.HEIGHT > this.powerUp.y) {
     this.hasPowerUp = true;
     this.storedPowerUpType = this.powerUp.type;
+    this.storedPowerUpInstantKill = this.powerUp.instantKill === true;
     this.powerUp = null;
     this.scheduleNextPowerUp(distance);
     this.playSound(this.soundFx.SCORE);
@@ -660,11 +688,15 @@
     this.powerUpProjectile.y < this.tRex.groundYPos + Trex.config.HEIGHT &&
     this.powerUpProjectile.y + size > this.tRex.groundYPos) {
     if (this.powerUpProjectile.type === 'red') {
-    this.cloneHealth = Math.max(0, this.cloneHealth - 1);
+    this.cloneHealth = this.powerUpProjectile.instantKill ? 0 :
+    Math.max(0, this.cloneHealth - 1);
     if (this.cloneHealth === 0) {
     this.cloneDefeated = true;
     this.cloneStunRemaining = 0;
     this.cloneFrozenX = null;
+    this.powerUpProjectile = null;
+    this.gameOver(true);
+    return;
     }
     } else if (this.powerUpProjectile.type === 'blue') {
     this.cloneSlowStacks++;
@@ -673,8 +705,7 @@
     } else {
     this.cloneStunRemaining = this.config.POWER_UP_STUN_DURATION;
     this.cloneFrozenX = this.companionDrawX;
-    this.cloneFrozenSourceX = this.tRex.currentAnimFrames[
-    this.tRex.currentFrame];
+    this.cloneFrozenSourceX = this.cloneSourceX;
     }
     this.powerUpProjectile = null;
     this.playSound(this.soundFx.HIT);
@@ -696,14 +727,14 @@
     drawPowerUpCube: function(x, y, size, type) {
     var isBlue = type === 'blue';
     var isRed = type === 'red';
-    this.canvasCtx.fillStyle = isRed ? '#ef4444' :
+    this.canvasCtx.fillStyle = isRed ? '#22c55e' :
     (isBlue ? '#38bdf8' : '#facc15');
     this.canvasCtx.fillRect(Math.round(x), Math.round(y), size, size);
-    this.canvasCtx.fillStyle = isRed ? '#fecaca' :
+    this.canvasCtx.fillStyle = isRed ? '#bbf7d0' :
     (isBlue ? '#bae6fd' : '#fef08a');
     this.canvasCtx.fillRect(Math.round(x) + 2, Math.round(y) + 2,
     size - 5, 3);
-    this.canvasCtx.strokeStyle = isRed ? '#991b1b' :
+    this.canvasCtx.strokeStyle = isRed ? '#166534' :
     (isBlue ? '#075985' : '#a16207');
     this.canvasCtx.lineWidth = 2;
     this.canvasCtx.strokeRect(Math.round(x), Math.round(y), size, size);
@@ -719,13 +750,13 @@
     var isInfinite = this.gameMode === 'infinite';
     this.canvasCtx.fillStyle = this.cloneDefeated ? '#64748b' :
     (isInfinite ? '#0369a1' : '#991b1b');
-    this.canvasCtx.fillText(this.cloneDefeated ? 'CLONE DERROTADO' :
-    (isInfinite ? 'CLONE INFINITO' : 'CLONE'),
+    this.canvasCtx.fillText(this.cloneDefeated ? 'VIROCRATA-19 DERROTADO' :
+    (isInfinite ? 'VIROCRATA-19 INFINITO' : 'VIROCRATA-19'),
     x, y);
     if (this.cloneDefeated || isInfinite) {
     return;
     }
-    x += 38;
+    x += this.canvasCtx.measureText('VIROCRATA-19').width + 8;
     for (var i = 0; i < this.config.CLONE_MAX_HEALTH; i++) {
     this.canvasCtx.fillStyle = i < this.cloneHealth ? '#ef4444' : '#e2e8f0';
     this.canvasCtx.fillRect(x + i * (blockSize + gap), y, blockSize, blockSize);
@@ -742,8 +773,12 @@
     }
     if (this.cloneSlowStacks > 0) {
     var slowLabel = 'x' + this.cloneSlowStacks;
-    var slowX = this.distanceMeter.x - 17 - slowLabel.length * 7;
-    var slowY = this.distanceMeter.y + 4;
+    this.canvasCtx.font = 'bold 10px monospace';
+    var slowX = this.gameMode === 'infinite' ?
+    180 + this.canvasCtx.measureText('VIROCRATA-19 INFINITO').width + 10 :
+    180 + this.canvasCtx.measureText('VIROCRATA-19').width + 8 +
+    this.config.CLONE_MAX_HEALTH * 12 + 8;
+    var slowY = 8;
     this.canvasCtx.fillStyle = '#38bdf8';
     this.canvasCtx.fillRect(slowX, slowY, 9, 9);
     this.canvasCtx.strokeStyle = '#075985';
@@ -764,7 +799,8 @@
     this.powerUpProjectile = {
     x: this.tRex.xPos - this.config.POWER_UP_SIZE,
     y: this.tRex.yPos + Math.floor(Trex.config.HEIGHT / 2),
-    type: this.storedPowerUpType
+    type: this.storedPowerUpType,
+    instantKill: this.storedPowerUpInstantKill === true
     };
     this.storedPowerUpType = null;
     this.playSound(this.soundFx.BUTTON_PRESS);
@@ -954,12 +990,21 @@
     /**
     * Game over state.
     */
-    gameOver: function() {
-    this.playSound(this.soundFx.HIT);
+    gameOver: function(won) {
+    if (this.crashed) {
+    return;
+    }
+    won = won === true;
+    this.playSound(won ? this.soundFx.SCORE : this.soundFx.HIT);
+    if (!won) {
     vibrate(200);
+    }
     this.stop();
     this.crashed = true;
+    this.sprintKeyHeld = false;
+    this.speedBoostActive = false;
     this.distanceMeter.acheivement = false;
+    if (!won) {
     this.tRex.update(100, Trex.status.CRASHED);
     // Game over panel.
     if (!this.gameOverPanel) {
@@ -969,6 +1014,7 @@
     } else {
     this.gameOverPanel.draw();
     }
+    }
     // Update the high score.
     if (this.distanceRan > this.highestScore) {
     this.highestScore = Math.ceil(this.distanceRan);
@@ -976,9 +1022,11 @@
     }
     // Reset the time clock.
     this.time = getTimeStamp();
-    showGameOverScreen();
+    showGameOverScreen(won,
+    this.distanceMeter.getActualDistance(this.distanceRan));
     },
     stop: function() {
+    resetMobileControls();
     this.activated = false;
     this.paused = true;
     cancelAnimationFrame(this.raqId);
@@ -1005,6 +1053,8 @@
     this.companionGap = 0;
     this.companionXPos = 2;
     this.companionDrawX = 2;
+    this.cloneAnimationTime = 0;
+    this.cloneSourceX = 0;
     this.clonePressurePoints = 0;
     this.powerUp = null;
     this.hasPowerUp = false;
@@ -1018,6 +1068,8 @@
     this.cloneHealth = this.config.CLONE_MAX_HEALTH;
     this.cloneDefeated = false;
     this.nextPowerUpDistance = getRandomNum(60, 100);
+    this.testCubePending = true;
+    this.storedPowerUpInstantKill = false;
     this.activated = true;
     this.crashed = false;
     this.distanceRan = 0;
@@ -2356,8 +2408,11 @@
 function fitGameToWindow() {
   var game = document.getElementById('main-frame-error');
   var sceneHeight = Runner.defaultDimensions.HEIGHT;
-  var scale = Math.min(window.innerHeight / sceneHeight, 2.5);
-  var top = (window.innerHeight - sceneHeight * scale) / 2;
+  var touchLayout = window.matchMedia('(any-pointer: coarse)').matches;
+  var availableHeight = Math.max(100, window.innerHeight - (touchLayout ? 104 : 0));
+  var scale = Math.min(availableHeight / sceneHeight, 2.5,
+    touchLayout ? window.innerWidth / 600 : Infinity);
+  var top = (availableHeight - sceneHeight * scale) / 2;
 
   game.style.width = (window.innerWidth / scale) + 'px';
   game.style.top = top + 'px';
@@ -2376,18 +2431,95 @@ var gameOverScreen = document.getElementById('game-over-screen');
 var restartButton = document.getElementById('restart-button');
 var menuButton = document.getElementById('menu-button');
 var modeButtons = document.querySelectorAll('[data-game-mode]');
+var mobileControls = document.getElementById('mobile-controls');
+var mobilePointers = new Map();
 
-function showGameOverScreen() {
+function resetMobileControls() {
+  if (!mobilePointers) return;
+  mobilePointers.forEach(function(button) { button.classList.remove('is-pressed'); });
+  mobilePointers.clear();
+  if (runner) {
+    runner.sprintKeyHeld = false;
+    runner.speedBoostActive = false;
+    if (runner.tRex) runner.tRex.endJump();
+  }
+}
+
+function mobileAction(action, pressed) {
+  if (action === 'run') {
+    runner.sprintKeyHeld = pressed;
+    if (!pressed) {
+      runner.speedBoostActive = false;
+      runner.sprintExhausted = false;
+    }
+  } else if (action === 'jump') {
+    if (pressed && !runner.tRex.jumping) {
+      runner.playSound(runner.soundFx.BUTTON_PRESS);
+      runner.tRex.startJump();
+    } else if (!pressed) runner.tRex.endJump();
+  } else if (action === 'throw' && pressed) runner.throwPowerUp();
+}
+
+mobileControls.querySelectorAll('[data-control]').forEach(function(button) {
+  button.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (runner.crashed || !runner.activated || mobileControls.hidden) return;
+    if (Array.from(mobilePointers.values()).includes(button)) return;
+    button.setPointerCapture(e.pointerId);
+    mobilePointers.set(e.pointerId, button);
+    button.classList.add('is-pressed');
+    mobileAction(button.dataset.control, true);
+  });
+  function release(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!mobilePointers.has(e.pointerId)) return;
+    mobilePointers.delete(e.pointerId);
+    button.classList.remove('is-pressed');
+    mobileAction(button.dataset.control, false);
+  }
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
+    button.addEventListener(type, release);
+  });
+  ['mousedown', 'mouseup', 'touchstart', 'touchend', 'contextmenu'].forEach(function(type) {
+    button.addEventListener(type, function(e) { e.preventDefault(); e.stopPropagation(); }, { passive: false });
+  });
+  button.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (e.detail === 0 && runner.activated && !runner.crashed && !mobileControls.hidden) {
+      mobileAction(button.dataset.control, true);
+      mobileAction(button.dataset.control, false);
+    }
+  });
+});
+window.addEventListener('blur', resetMobileControls);
+window.addEventListener('resize', resetMobileControls);
+
+function showGameOverScreen(won, score) {
+  mobileControls.hidden = true;
+  gameOverScreen.classList.toggle('is-victory', won);
+  document.getElementById('result-label').textContent = won ? 'VITÓRIA' : 'DERROTA';
+  document.getElementById('game-over-title').textContent =
+    won ? 'VOCÊ VENCEU O VÍRUS. MAS SOBREVIVER NÃO DEVERIA SER UM PRIVILÉGIO.' : 'O VIROCRATA-19 TE PEGOU!';
+  document.getElementById('result-message').textContent = won ?
+    'Você sobreviveu. Quantos ainda precisam morrer para a saúde virar prioridade do governo?' :
+    'Use os cubos e a corrida para escapar na próxima tentativa.';
+  document.getElementById('result-score').textContent = 'PONTUAÇÃO: ' + score;
+  restartButton.textContent = '↻ TENTAR NOVAMENTE';
   gameOverScreen.classList.remove('is-hidden');
+  restartButton.focus({ preventScroll: true });
 }
 
 function hideGameOverScreen() {
   gameOverScreen.classList.add('is-hidden');
+  mobileControls.hidden = false;
 }
 
 function startFromMenu(mode) {
   runner.gameMode = mode;
   startScreen.classList.add('is-hidden');
+  mobileControls.hidden = false;
   if (!runner.activated) {
     runner.loadSounds();
     runner.activated = true;
@@ -2420,4 +2552,5 @@ menuButton.addEventListener('click', function(e) {
   runner.stop();
   hideGameOverScreen();
   startScreen.classList.remove('is-hidden');
+  mobileControls.hidden = true;
 });
