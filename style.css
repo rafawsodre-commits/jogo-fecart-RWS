@@ -12,15 +12,8 @@ body {
   font-size: 125%;
 }
 
-/* Modo de teste: paleta invertida e colorida. */
-html,
-body {
-  background: radial-gradient(circle at top, #263b72 0, #10162e 48%, #060812 100%);
-  color: #bfeeff;
-}
-
 .runner-canvas {
-  /* Sem filtros: o canvas é redesenhado muitas vezes por segundo. */
+  /* Mantém as cores originais do jogo. */
   filter: none;
 }
 
@@ -581,6 +574,124 @@ body {
   position: fixed;
   top: 0;
   transform-origin: left top;
+}
+
+.start-screen {
+  align-items: center;
+  background:
+    linear-gradient(rgba(15, 23, 42, .9), rgba(15, 23, 42, .96)),
+    repeating-linear-gradient(90deg, transparent 0 19px, rgba(56, 189, 248, .08) 20px);
+  color: #f8fafc;
+  display: flex;
+  height: 150px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  text-align: center;
+  width: 100%;
+  z-index: 20;
+}
+
+.start-screen.is-hidden {
+  display: none;
+}
+
+.start-card {
+  max-width: 410px;
+  padding: 8px 16px;
+}
+
+.start-eyebrow {
+  color: #38bdf8;
+  font: bold 7px/1 monospace;
+  letter-spacing: 2px;
+  margin: 0 0 4px;
+}
+
+.start-card h1 {
+  color: #f8fafc;
+  font: 900 24px/1 monospace;
+  letter-spacing: 3px;
+  margin: 0 0 5px;
+  text-shadow: 2px 2px 0 #ef4444;
+}
+
+.start-story {
+  color: #cbd5e1;
+  font: 8px/1.3 monospace;
+  margin: 0 auto 6px;
+}
+
+.start-controls {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 7px;
+}
+
+.start-controls span {
+  color: #e2e8f0;
+  font: bold 7px/1 monospace;
+}
+
+.play-button {
+  background: #ef4444;
+  border: 0;
+  box-shadow: 0 3px 0 #991b1b;
+  color: white;
+  cursor: pointer;
+  font: bold 10px/1 monospace;
+  padding: 7px 20px;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.infinite-button {
+  background: #0284c7;
+  box-shadow: 0 3px 0 #075985;
+}
+
+.infinite-button:hover,
+.infinite-button:focus-visible {
+  background: #38bdf8;
+}
+
+.game-over-screen {
+  background: rgba(15, 23, 42, .96);
+}
+
+.game-over-card h2 {
+  color: #f8fafc;
+  font: 900 20px/1 monospace;
+  letter-spacing: 2px;
+  margin: 0 0 7px;
+  text-shadow: 2px 2px 0 #ef4444;
+}
+
+.menu-button {
+  background: #334155;
+  box-shadow: 0 3px 0 #0f172a;
+}
+
+.menu-button:hover,
+.menu-button:focus-visible {
+  background: #475569;
+}
+
+.play-button:hover,
+.play-button:focus-visible {
+  background: #f87171;
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+}
+
+.play-button:active {
+  box-shadow: none;
+  transform: translateY(3px);
 }
 
 #main-frame-error .runner-container,

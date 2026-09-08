@@ -44,7 +44,21 @@
     this.speedBoostActive = false;
     this.companionGap = 0;
     this.companionXPos = 2;
+    this.companionDrawX = 2;
     this.clonePressurePoints = 0;
+    this.powerUp = null;
+    this.hasPowerUp = false;
+    this.storedPowerUpType = null;
+    this.powerUpProjectile = null;
+    this.cloneStunRemaining = 0;
+    this.cloneFrozenX = null;
+    this.cloneFrozenSourceX = 0;
+    this.cloneSlowStacks = 0;
+    this.cloneBlueFlashRemaining = 0;
+    this.cloneHealth = this.config.CLONE_MAX_HEALTH;
+    this.cloneDefeated = false;
+    this.gameMode = 'normal';
+    this.nextPowerUpDistance = 80;
     this.msPerFrame = 1000 / FPS;
     this.currentSpeed = this.config.SPEED;
     this.obstacles = [];
@@ -114,10 +128,23 @@
     STAMINA_DRAIN: 35,
     STAMINA_MAX: 100,
     STAMINA_REGEN: 14,
+    CLONE_BASE_SPEED: 0.012,
+    CLONE_DISTANCE_SPEED_RATE: 0.00018,
+    CLONE_DISTANCE_SPEED_CAP: 0.075,
     CLONE_PRESSURE_PER_HIT: 25,
     CLONE_PRESSURE_RECOVERY: 0.2,
-    CLONE_SPEED_PER_LOST_POINT: 0.001,
-    CLONE_MAX_PENALTY_SPEED: 0.1
+    CLONE_SPEED_PER_LOST_POINT: 0.0006,
+    CLONE_MAX_PENALTY_SPEED: 0.05,
+    POWER_UP_MIN_GAP: 90,
+    POWER_UP_MAX_GAP: 170,
+    POWER_UP_SIZE: 14,
+    POWER_UP_PROJECTILE_SPEED: 0.38,
+    POWER_UP_STUN_DURATION: 2500,
+    POWER_UP_BLUE_CHANCE: 0.3,
+    POWER_UP_RED_CHANCE: 0.25,
+    POWER_UP_SLOW_PER_STACK: 0.15,
+    POWER_UP_BLUE_FLASH_DURATION: 700,
+    CLONE_MAX_HEALTH: 6
     };
     /**
     * Default dimensions.
@@ -144,6 +171,7 @@
     */
     Runner.imageSources = {
     LDPI: [
+    {name: 'GROUND', id: 'custom-ground'},
     {name: 'CACTUS_LARGE', id: '1x-obstacle-large'},
     {name: 'CACTUS_SMALL', id: '1x-obstacle-small'},
     {name: 'CLOUD', id: '1x-cloud'},
@@ -153,6 +181,7 @@
     {name: 'TREX', id: '1x-trex'}
     ],
     HDPI: [
+    {name: 'GROUND', id: 'custom-ground'},
     {name: 'CACTUS_LARGE', id: '2x-obstacle-large'},
     {name: 'CACTUS_SMALL', id: '2x-obstacle-small'},
     {name: 'CLOUD', id: '2x-cloud'},
@@ -179,6 +208,7 @@
     JUMP: {'38': 1, '32': 1}, // Up, spacebar
     DUCK: {'40': 1}, // Down
     SPEED_UP: {'39': 1}, // Right
+    POWER_UP: {'37': 1}, // Left
     RESTART: {'13': 1} // Enter
     };
     /**
@@ -466,9 +496,12 @@
     }
     if (!this.crashed) {
     this.tRex.update(deltaTime);
+    this.updatePowerUp(deltaTime);
     this.drawCompanion(deltaTime);
     if (!this.crashed) {
     this.drawStaminaBar();
+    this.drawCloneHealth();
+    this.drawPowerUpIndicator();
     this.raq();
     }
     }
@@ -477,51 +510,264 @@
     * Draw a decorative companion behind the player. It has no collision box.
     */
     drawCompanion: function(deltaTime) {
+    if (this.cloneDefeated) {
+    return;
+    }
     var sourceX = this.activated ?
     this.tRex.currentAnimFrames[this.tRex.currentFrame] : 44;
+    if (this.cloneStunRemaining > 0) {
+    sourceX = this.cloneFrozenSourceX;
+    }
     var scale = IS_HIDPI ? 2 : 1;
     var initialX = 2;
     var offscreenX = -Trex.config.WIDTH;
     var offscreenSpeedMultiplier = 1.15;
     var targetX = Math.max(initialX, this.tRex.xPos - Trex.config.WIDTH + 2);
-    var companionX = initialX;
+    var companionX = this.companionXPos;
     var chaseSpeed = 0;
-    if (this.started) {
+    if (this.started && this.cloneStunRemaining <= 0) {
     var distance = this.distanceMeter.getActualDistance(this.distanceRan);
-    chaseSpeed = Math.min(0.14, 0.025 + distance * 0.00035);
+    chaseSpeed = Math.min(this.config.CLONE_DISTANCE_SPEED_CAP,
+    this.config.CLONE_BASE_SPEED + distance *
+    this.config.CLONE_DISTANCE_SPEED_RATE);
     chaseSpeed += Math.min(this.config.CLONE_MAX_PENALTY_SPEED,
     this.clonePressurePoints * this.config.CLONE_SPEED_PER_LOST_POINT);
+    chaseSpeed *= Math.pow(1 - this.config.POWER_UP_SLOW_PER_STACK,
+    this.cloneSlowStacks);
     var currentX = this.companionXPos - this.companionGap;
-    if (currentX <= offscreenX) {
+    if (currentX <= offscreenX && this.cloneSlowStacks === 0) {
     chaseSpeed *= offscreenSpeedMultiplier;
     }
     this.companionXPos = Math.min(targetX,
     this.companionXPos + chaseSpeed * deltaTime);
     companionX = this.companionXPos;
-    } else {
+    } else if (!this.started) {
     this.companionXPos = initialX;
     }
-    if (this.started && this.speedBoostActive) {
+    if (this.cloneStunRemaining <= 0 && this.started &&
+    this.speedBoostActive) {
     var maximumGap = Math.max(0, this.companionXPos - offscreenX);
     this.companionGap = Math.min(maximumGap,
     this.companionGap + deltaTime * 0.12);
-    } else {
+    } else if (this.cloneStunRemaining <= 0) {
     this.companionGap = Math.max(0,
     this.companionGap - deltaTime * (0.008 + chaseSpeed * 0.25));
     }
+    if (this.cloneStunRemaining > 0 && this.cloneFrozenX !== null) {
+    companionX = this.cloneFrozenX;
+    } else {
     companionX = Math.max(offscreenX, companionX - this.companionGap);
-    if (this.started && companionX + Trex.config.WIDTH >= this.tRex.xPos) {
+    this.companionDrawX = companionX;
+    }
+    if (this.started && this.cloneStunRemaining <= 0 &&
+    companionX + Trex.config.WIDTH >= this.tRex.xPos) {
     this.gameOver();
     return;
     }
     this.canvasCtx.drawImage(this.images.TREX, sourceX * scale, 0,
     Trex.config.WIDTH * scale, Trex.config.HEIGHT * scale,
     companionX, this.tRex.groundYPos, Trex.config.WIDTH, Trex.config.HEIGHT);
+    if (this.cloneStunRemaining > 0) {
+    this.canvasCtx.strokeStyle = '#facc15';
+    this.canvasCtx.lineWidth = 2;
+    this.canvasCtx.strokeRect(companionX - 2, this.tRex.groundYPos - 2,
+    Trex.config.WIDTH + 4, Trex.config.HEIGHT + 4);
+    } else if (this.cloneBlueFlashRemaining > 0) {
+    this.canvasCtx.strokeStyle = '#38bdf8';
+    this.canvasCtx.lineWidth = 2;
+    this.canvasCtx.strokeRect(companionX - 2, this.tRex.groundYPos - 2,
+    Trex.config.WIDTH + 4, Trex.config.HEIGHT + 4);
+    }
     // Mantem a barreira totalmente fora da borda esquerda do canvas.
     var barrierX = -10;
     this.canvasCtx.fillStyle = '#f59e0b';
     this.canvasCtx.fillRect(barrierX,
     this.tRex.groundYPos - 12, 10, 59);
+    },
+    /** Update, collect and draw the yellow cube power-up. */
+    updatePowerUp: function(deltaTime) {
+    if (!this.started) {
+    return;
+    }
+    if (this.cloneStunRemaining > 0) {
+    var frozenWorldMovement = Math.floor((this.currentSpeed * FPS / 1000) *
+    deltaTime);
+    this.cloneFrozenX -= frozenWorldMovement;
+    this.companionDrawX = this.cloneFrozenX;
+    this.cloneStunRemaining = Math.max(0,
+    this.cloneStunRemaining - deltaTime);
+    if (this.cloneStunRemaining === 0 && this.cloneFrozenX !== null) {
+    this.companionXPos = this.cloneFrozenX + this.companionGap;
+    this.companionDrawX = this.cloneFrozenX;
+    this.cloneFrozenX = null;
+    }
+    }
+    if (this.cloneBlueFlashRemaining > 0) {
+    this.cloneBlueFlashRemaining = Math.max(0,
+    this.cloneBlueFlashRemaining - deltaTime);
+    }
+    var size = this.config.POWER_UP_SIZE;
+    var distance = this.distanceMeter.getActualDistance(this.distanceRan);
+    if (!this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
+    distance >= this.nextPowerUpDistance) {
+    var elevated = Math.random() > 0.5;
+    var powerUpRoll = Math.random();
+    var redChance = this.gameMode === 'normal' ?
+    this.config.POWER_UP_RED_CHANCE : 0;
+    var powerUpType = powerUpRoll < redChance ?
+    'red' : (powerUpRoll < redChance +
+    this.config.POWER_UP_BLUE_CHANCE ? 'blue' : 'yellow');
+    this.powerUp = {
+    x: this.dimensions.WIDTH,
+    y: this.tRex.groundYPos + Trex.config.HEIGHT - size -
+    (elevated ? 50 : 0),
+    type: powerUpType
+    };
+    }
+    if (this.powerUp) {
+    this.powerUp.x -= Math.floor((this.currentSpeed * FPS / 1000) *
+    deltaTime);
+    var playerLeft = this.tRex.xPos;
+    var playerTop = this.tRex.yPos;
+    if (playerLeft < this.powerUp.x + size &&
+    playerLeft + Trex.config.WIDTH > this.powerUp.x &&
+    playerTop < this.powerUp.y + size &&
+    playerTop + Trex.config.HEIGHT > this.powerUp.y) {
+    this.hasPowerUp = true;
+    this.storedPowerUpType = this.powerUp.type;
+    this.powerUp = null;
+    this.scheduleNextPowerUp(distance);
+    this.playSound(this.soundFx.SCORE);
+    } else if (this.powerUp.x + size < 0) {
+    this.powerUp = null;
+    this.scheduleNextPowerUp(distance);
+    }
+    }
+    if (this.powerUp) {
+    this.drawPowerUpCube(this.powerUp.x, this.powerUp.y, size,
+    this.powerUp.type);
+    }
+    if (this.powerUpProjectile) {
+    this.powerUpProjectile.x -= this.config.POWER_UP_PROJECTILE_SPEED *
+    deltaTime;
+    var cloneLeft = this.companionDrawX;
+    var cloneIsVisible = !this.cloneDefeated &&
+    cloneLeft + Trex.config.WIDTH > 0 &&
+    cloneLeft < this.dimensions.WIDTH;
+    if (cloneIsVisible &&
+    this.powerUpProjectile.x < cloneLeft + Trex.config.WIDTH &&
+    this.powerUpProjectile.x + size > cloneLeft &&
+    this.powerUpProjectile.y < this.tRex.groundYPos + Trex.config.HEIGHT &&
+    this.powerUpProjectile.y + size > this.tRex.groundYPos) {
+    if (this.powerUpProjectile.type === 'red') {
+    this.cloneHealth = Math.max(0, this.cloneHealth - 1);
+    if (this.cloneHealth === 0) {
+    this.cloneDefeated = true;
+    this.cloneStunRemaining = 0;
+    this.cloneFrozenX = null;
+    }
+    } else if (this.powerUpProjectile.type === 'blue') {
+    this.cloneSlowStacks++;
+    this.cloneBlueFlashRemaining =
+    this.config.POWER_UP_BLUE_FLASH_DURATION;
+    } else {
+    this.cloneStunRemaining = this.config.POWER_UP_STUN_DURATION;
+    this.cloneFrozenX = this.companionDrawX;
+    this.cloneFrozenSourceX = this.tRex.currentAnimFrames[
+    this.tRex.currentFrame];
+    }
+    this.powerUpProjectile = null;
+    this.playSound(this.soundFx.HIT);
+    } else if (this.powerUpProjectile.x + size < 0) {
+    this.powerUpProjectile = null;
+    }
+    }
+    if (this.powerUpProjectile) {
+    this.drawPowerUpCube(this.powerUpProjectile.x,
+    this.powerUpProjectile.y, size, this.powerUpProjectile.type);
+    }
+    },
+    /** Choose the score at which another cube may appear. */
+    scheduleNextPowerUp: function(distance) {
+    this.nextPowerUpDistance = distance + getRandomNum(
+    this.config.POWER_UP_MIN_GAP, this.config.POWER_UP_MAX_GAP);
+    },
+    /** Draw a pixel-style power-up cube. */
+    drawPowerUpCube: function(x, y, size, type) {
+    var isBlue = type === 'blue';
+    var isRed = type === 'red';
+    this.canvasCtx.fillStyle = isRed ? '#ef4444' :
+    (isBlue ? '#38bdf8' : '#facc15');
+    this.canvasCtx.fillRect(Math.round(x), Math.round(y), size, size);
+    this.canvasCtx.fillStyle = isRed ? '#fecaca' :
+    (isBlue ? '#bae6fd' : '#fef08a');
+    this.canvasCtx.fillRect(Math.round(x) + 2, Math.round(y) + 2,
+    size - 5, 3);
+    this.canvasCtx.strokeStyle = isRed ? '#991b1b' :
+    (isBlue ? '#075985' : '#a16207');
+    this.canvasCtx.lineWidth = 2;
+    this.canvasCtx.strokeRect(Math.round(x), Math.round(y), size, size);
+    },
+    /** Draw the clone's six-point health meter. */
+    drawCloneHealth: function() {
+    var x = 180;
+    var y = 8;
+    var blockSize = 9;
+    var gap = 3;
+    this.canvasCtx.font = 'bold 10px monospace';
+    this.canvasCtx.textBaseline = 'top';
+    var isInfinite = this.gameMode === 'infinite';
+    this.canvasCtx.fillStyle = this.cloneDefeated ? '#64748b' :
+    (isInfinite ? '#0369a1' : '#991b1b');
+    this.canvasCtx.fillText(this.cloneDefeated ? 'CLONE DERROTADO' :
+    (isInfinite ? 'CLONE INFINITO' : 'CLONE'),
+    x, y);
+    if (this.cloneDefeated || isInfinite) {
+    return;
+    }
+    x += 38;
+    for (var i = 0; i < this.config.CLONE_MAX_HEALTH; i++) {
+    this.canvasCtx.fillStyle = i < this.cloneHealth ? '#ef4444' : '#e2e8f0';
+    this.canvasCtx.fillRect(x + i * (blockSize + gap), y, blockSize, blockSize);
+    this.canvasCtx.strokeStyle = '#991b1b';
+    this.canvasCtx.strokeRect(x + i * (blockSize + gap), y,
+    blockSize, blockSize);
+    }
+    },
+    /** Draw the stored power-up beside the stamina bar. */
+    drawPowerUpIndicator: function() {
+    if (this.hasPowerUp) {
+    this.drawPowerUpCube(148, 7, this.config.POWER_UP_SIZE,
+    this.storedPowerUpType);
+    }
+    if (this.cloneSlowStacks > 0) {
+    var slowLabel = 'x' + this.cloneSlowStacks;
+    var slowX = this.distanceMeter.x - 17 - slowLabel.length * 7;
+    var slowY = this.distanceMeter.y + 4;
+    this.canvasCtx.fillStyle = '#38bdf8';
+    this.canvasCtx.fillRect(slowX, slowY, 9, 9);
+    this.canvasCtx.strokeStyle = '#075985';
+    this.canvasCtx.strokeRect(slowX, slowY, 9, 9);
+    this.canvasCtx.fillStyle = '#38bdf8';
+    this.canvasCtx.font = 'bold 11px monospace';
+    this.canvasCtx.textBaseline = 'top';
+    this.canvasCtx.fillText(slowLabel,
+    slowX + 12, slowY - 1);
+    }
+    },
+    /** Throw the stored cube backwards toward the clone. */
+    throwPowerUp: function() {
+    if (!this.hasPowerUp || this.powerUpProjectile || !this.started) {
+    return;
+    }
+    this.hasPowerUp = false;
+    this.powerUpProjectile = {
+    x: this.tRex.xPos - this.config.POWER_UP_SIZE,
+    y: this.tRex.yPos + Math.floor(Trex.config.HEIGHT / 2),
+    type: this.storedPowerUpType
+    };
+    this.storedPowerUpType = null;
+    this.playSound(this.soundFx.BUTTON_PRESS);
     },
     /** Update the sprint energy and its temporary speed bonus. */
     updateStamina: function(deltaTime) {
@@ -647,6 +893,12 @@
     e.preventDefault();
     this.sprintKeyHeld = true;
     }
+    var isPowerUp = Runner.keycodes.POWER_UP[String(e.keyCode)] ||
+    e.key === 'ArrowLeft';
+    if (isPowerUp && !this.crashed) {
+    e.preventDefault();
+    this.throwPowerUp();
+    }
     },
     /**
     * Process key up.
@@ -724,6 +976,7 @@
     }
     // Reset the time clock.
     this.time = getTimeStamp();
+    showGameOverScreen();
     },
     stop: function() {
     this.activated = false;
@@ -742,6 +995,7 @@
     },
     restart: function() {
     if (!this.raqId) {
+    hideGameOverScreen();
     this.playCount++;
     this.runningTime = 0;
     this.stamina = this.config.STAMINA_MAX;
@@ -750,7 +1004,20 @@
     this.speedBoostActive = false;
     this.companionGap = 0;
     this.companionXPos = 2;
+    this.companionDrawX = 2;
     this.clonePressurePoints = 0;
+    this.powerUp = null;
+    this.hasPowerUp = false;
+    this.storedPowerUpType = null;
+    this.powerUpProjectile = null;
+    this.cloneStunRemaining = 0;
+    this.cloneFrozenX = null;
+    this.cloneFrozenSourceX = 0;
+    this.cloneSlowStacks = 0;
+    this.cloneBlueFlashRemaining = 0;
+    this.cloneHealth = this.config.CLONE_MAX_HEALTH;
+    this.cloneDefeated = false;
+    this.nextPowerUpDistance = getRandomNum(60, 100);
     this.activated = true;
     this.crashed = false;
     this.distanceRan = 0;
@@ -1851,6 +2118,17 @@
     * Draw the horizon line.
     */
     draw: function() {
+    if (this.image.id === 'custom-ground') {
+    this.drawCustomGround(this.xPos[0]);
+    this.drawCustomGround(this.xPos[1]);
+    var customNextX = Math.max(this.xPos[0], this.xPos[1]) +
+    this.dimensions.WIDTH;
+    while (customNextX < this.canvas.width) {
+    this.drawCustomGround(customNextX);
+    customNextX += this.dimensions.WIDTH;
+    }
+    return;
+    }
     this.canvasCtx.drawImage(this.image, this.sourceXPos[0], 0,
     this.sourceDimensions.WIDTH, this.sourceDimensions.HEIGHT,
     this.xPos[0], this.yPos,
@@ -1871,6 +2149,11 @@
     this.dimensions.WIDTH + 1, this.dimensions.HEIGHT);
     nextX += this.dimensions.WIDTH;
     }
+    },
+    /** Draw only the painted bottom strip from the custom 600px sprite. */
+    drawCustomGround: function(x) {
+    this.canvasCtx.drawImage(this.image, 0, 500, 600, 100,
+    x, this.yPos, this.dimensions.WIDTH + 1, 23);
     },
     /**
     * Update the x position of an indivdual piece of the line.
@@ -1933,7 +2216,7 @@
     this.cloudImg = images.CLOUD;
     this.cloudSpeed = this.config.BG_CLOUD_SPEED;
     // Horizon
-    this.horizonImg = images.HORIZON;
+    this.horizonImg = images.GROUND || images.HORIZON;
     this.horizonLine = null;
     // Obstacles
     this.obstacleImgs = {
@@ -2087,4 +2370,54 @@ function fitGameToWindow() {
 
 fitGameToWindow();
 window.addEventListener('resize', fitGameToWindow);
-new Runner('.interstitial-wrapper');
+var runner = new Runner('.interstitial-wrapper');
+var startScreen = document.getElementById('start-screen');
+var gameOverScreen = document.getElementById('game-over-screen');
+var restartButton = document.getElementById('restart-button');
+var menuButton = document.getElementById('menu-button');
+var modeButtons = document.querySelectorAll('[data-game-mode]');
+
+function showGameOverScreen() {
+  gameOverScreen.classList.remove('is-hidden');
+}
+
+function hideGameOverScreen() {
+  gameOverScreen.classList.add('is-hidden');
+}
+
+function startFromMenu(mode) {
+  runner.gameMode = mode;
+  startScreen.classList.add('is-hidden');
+  if (!runner.activated) {
+    runner.loadSounds();
+    runner.activated = true;
+  }
+  if (!runner.tRex.jumping) {
+    runner.playSound(runner.soundFx.BUTTON_PRESS);
+    runner.tRex.startJump();
+  }
+  if (!runner.raqId) {
+    runner.update();
+  }
+}
+
+for (var modeButtonIndex = 0; modeButtonIndex < modeButtons.length;
+  modeButtonIndex++) {
+  modeButtons[modeButtonIndex].addEventListener('click', function(e) {
+    e.stopPropagation();
+    startFromMenu(this.getAttribute('data-game-mode'));
+  });
+}
+
+restartButton.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runner.restart();
+});
+
+menuButton.addEventListener('click', function(e) {
+  e.stopPropagation();
+  runner.restart();
+  runner.stop();
+  hideGameOverScreen();
+  startScreen.classList.remove('is-hidden');
+});
