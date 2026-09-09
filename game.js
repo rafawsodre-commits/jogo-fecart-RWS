@@ -146,7 +146,7 @@
     POWER_UP_BLUE_CHANCE: 0.3,
     POWER_UP_RED_CHANCE: 0.25,
     // Temporary shortcut for testing the victory screen.
-    TEST_VICTORY_CUBE: false,
+    TEST_VICTORY_CUBE: true,
     POWER_UP_SLOW_PER_STACK: 0.15,
     POWER_UP_BLUE_FLASH_DURATION: 700,
     CLONE_MAX_HEALTH: 6
@@ -184,7 +184,7 @@
     {name: 'HORIZON', id: '1x-horizon'},
     {name: 'RESTART', id: '1x-restart'},
     {name: 'TEXT_SPRITE', id: '1x-text'},
-    {name: 'TREX', id: '1x-trex'}
+    {name: 'TREX', id: 'gulosin-sprite'}
     ],
     HDPI: [
     {name: 'CLONE', id: 'clone-sprite'},
@@ -195,7 +195,7 @@
     {name: 'HORIZON', id: '2x-horizon'},
     {name: 'RESTART', id: '2x-restart'},
     {name: 'TEXT_SPRITE', id: '2x-text'},
-    {name: 'TREX', id: '2x-trex'}
+    {name: 'TREX', id: 'gulosin-sprite'}
     ]
     };
     /**
@@ -1636,15 +1636,19 @@
     */
     Trex.animFrames = {
     WAITING: {
-    frames: [44, 0],
+    frames: [94, 94],
     msPerFrame: 1000 / 3
     },
     RUNNING: {
-    frames: [88, 132],
-    msPerFrame: 1000 / 12
+    frames: [0, 47, 94],
+    msPerFrame: 40
+    },
+    SPRINTING: {
+    frames: [141, 188, 235, 282],
+    msPerFrame: 40
     },
     CRASHED: {
-    frames: [220],
+    frames: [94],
     msPerFrame: 1000 / 60
     },
     JUMPING: {
@@ -1686,11 +1690,23 @@
     if (opt_status) {
     this.status = opt_status;
     this.currentFrame = 0;
+    this.timer = 0;
     this.msPerFrame = Trex.animFrames[opt_status].msPerFrame;
     this.currentAnimFrames = Trex.animFrames[opt_status].frames;
     if (opt_status == Trex.status.WAITING) {
     this.animStartTime = getTimeStamp();
     this.setBlinkDelay();
+    }
+    }
+    // The circular frames are reserved for the sprint effect.
+    if (this.status === Trex.status.RUNNING) {
+    var animation = Runner.instance_.speedBoostActive ?
+    Trex.animFrames.SPRINTING : Trex.animFrames.RUNNING;
+    if (this.currentAnimFrames !== animation.frames) {
+    this.currentAnimFrames = animation.frames;
+    this.msPerFrame = animation.msPerFrame;
+    this.currentFrame = 0;
+    this.timer = 0;
     }
     }
     // Game intro animation, T-rex moves in from the left.
@@ -1705,9 +1721,9 @@
     }
     // Update the frame position.
     if (this.timer >= this.msPerFrame) {
-    this.currentFrame = this.currentFrame ==
-    this.currentAnimFrames.length - 1 ? 0 : this.currentFrame + 1;
-    this.timer = 0;
+    this.currentFrame = (this.currentFrame +
+    Math.floor(this.timer / this.msPerFrame)) % this.currentAnimFrames.length;
+    this.timer %= this.msPerFrame;
     }
     },
     /**
@@ -1716,20 +1732,12 @@
     * @param {number} y
     */
     draw: function(x, y) {
-    var sourceX = x;
-    var sourceY = y;
-    var sourceWidth = this.config.WIDTH;
-    var sourceHeight = this.config.HEIGHT;
-    if (IS_HIDPI) {
-    sourceX *= 2;
-    sourceY *= 2;
-    sourceWidth *= 2;
-    sourceHeight *= 2;
-    }
-    this.canvasCtx.drawImage(this.image, sourceX, sourceY,
-    sourceWidth, sourceHeight,
+    this.canvasCtx.save();
+    this.canvasCtx.imageSmoothingEnabled = false;
+    this.canvasCtx.drawImage(this.image, x, y, 47, 47,
     this.xPos, this.yPos,
     this.config.WIDTH, this.config.HEIGHT);
+    this.canvasCtx.restore();
     },
     /**
     * Sets a random time for the blink to happen.
@@ -2503,7 +2511,7 @@ function showGameOverScreen(won, score) {
   document.getElementById('game-over-title').textContent =
     won ? 'VOCÊ VENCEU O VÍRUS. MAS SOBREVIVER NÃO DEVERIA SER UM PRIVILÉGIO.' : 'O VIROCRATA-19 TE PEGOU!';
   document.getElementById('result-message').textContent = won ?
-    'Você sobreviveu. Quantos ainda precisam morrer para a saúde virar prioridade do governo?' :
+    'Quantos ainda precisam morrer para a saúde virar prioridade do governo?' :
     'Use os cubos e a corrida para escapar na próxima tentativa.';
   document.getElementById('result-score').textContent = 'PONTUAÇÃO: ' + score;
   restartButton.textContent = '↻ TENTAR NOVAMENTE';
