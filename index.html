@@ -8,27 +8,33 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="main-frame-error" class="interstitial-wrapper" jstcache="0">
-    <section id="start-screen" class="start-screen" aria-labelledby="game-title">
-      <div class="start-card">
-        <p class="start-eyebrow">CORRA • COLETE • ATAQUE</p>
-        <h1 id="game-title">DINO RUNNER</h1>
-        <p class="start-story">Fuja do Virocrata-19 e use o cubo verde para acabar com suas 6 vidas.</p>
-        <div class="start-controls" aria-label="Controles do jogo">
-          <span>↑ PULAR</span>
-          <span>→ CORRER</span>
-          <span>← LANÇAR</span>
-        </div>
-        <div class="mode-buttons" aria-label="Escolha o modo de jogo">
-          <button class="play-button" type="button" data-game-mode="normal">▶ NORMAL</button>
-          <button class="play-button infinite-button" type="button" data-game-mode="infinite">∞ INFINITO</button>
-        </div>
+    <section id="start-screen" class="start-screen" aria-label="Escolha o modo de jogo">
+      <div class="start-art-menu">
+        <img src="tela_inicial.gif" alt="Gulosin e Virocrata-19" width="320" height="320">
+        <button class="art-mode-button" type="button" data-game-mode="normal">MODO NORMAL</button>
+        <button class="art-mode-button" type="button" data-game-mode="infinite">MODO INFINITO</button>
+        <button class="art-mode-button" type="button" data-game-mode="dev">MODO DEV</button>
       </div>
     </section>
+    <dialog id="dev-dialog" aria-labelledby="dev-title">
+      <form id="dev-form">
+        <h2 id="dev-title">Modo Dev</h2>
+        <label for="dev-password">Digite a senha para entrar</label>
+        <input id="dev-password" type="password" autocomplete="off" required>
+        <p id="dev-error" role="alert"></p>
+        <div class="dev-actions">
+          <button id="dev-cancel" type="button">Cancelar</button>
+          <button type="submit">Entrar</button>
+        </div>
+      </form>
+    </dialog>
+<div id="main-frame-error" class="interstitial-wrapper" jstcache="0">
 
     <section id="game-over-screen" class="start-screen game-over-screen is-hidden"
       aria-labelledby="game-over-title">
       <div class="start-card game-over-card">
+        <img class="defeat-art" src="tela_derrota.gif"
+          alt="Virocrata-19 na tela de derrota." width="128" height="128">
         <p id="result-label" class="start-eyebrow">DERROTA</p>
         <h2 id="game-over-title">O VIROCRATA-19 TE PEGOU!</h2>
         <p id="result-message" class="start-story">Tente escapar novamente ou escolha outro modo.</p>
@@ -43,6 +49,9 @@
     </section>
 
     <div id="offline-resources" jstcache="0">
+    <img id="vaccine-yellow" src="vacina_amarela.gif" alt="">
+    <img id="vaccine-blue" src="vacinas_azul.gif" alt="">
+    <img id="vaccine-green" src="unnamed.gif" alt="">
     <img id="clone-sprite" src="images/cara-malefico-sprites.png" alt="">
     <img id="gulosin-sprite" src="images/gulosin-sprites.png" alt="">
     <img id="custom-ground" src="images/ground.png" alt="">

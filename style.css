@@ -644,6 +644,78 @@ body {
   display: none;
 }
 
+#start-screen {
+  position: fixed;
+  height: 100%;
+  background: #000;
+  z-index: 40;
+}
+
+.start-art-menu {
+  position: relative;
+  width: min(100vw, 100dvh);
+  aspect-ratio: 1;
+  container-type: inline-size;
+}
+
+.start-art-menu img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.art-mode-button {
+  position: absolute;
+  left: 68.75%;
+  width: 29.375%;
+  height: 4.375%;
+  float: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #317c78;
+  border-radius: 0;
+  background: rgba(155, 255, 244, .85);
+  color: #172b38;
+  font: bold 2.5cqw/1 monospace;
+  touch-action: manipulation;
+}
+
+.art-mode-button[data-game-mode="normal"] { top: 76.5625%; }
+.art-mode-button[data-game-mode="infinite"] { top: 83.75%; }
+.art-mode-button[data-game-mode="dev"] { top: 90.9375%; }
+
+.art-mode-button:hover,
+.art-mode-button:focus-visible {
+  background: #fff59b;
+  outline: 2px solid #771483;
+  outline-offset: 1px;
+}
+
+#dev-dialog {
+  width: min(320px, 80vw);
+  padding: 24px;
+  border: 2px solid #9bfff4;
+  border-radius: 8px;
+  background: #17202e;
+  color: #fff;
+  font: 16px/1.4 monospace;
+}
+
+#dev-dialog::backdrop { background: rgba(0, 0, 0, .8); }
+#dev-title { color: #9bfff4; margin: 0 0 16px; }
+#dev-password {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  font: inherit;
+}
+#dev-error { color: #fca5a5; font-size: 13px; }
+.dev-actions { display: flex; justify-content: flex-end; gap: 12px; }
+.dev-actions button { float: none; margin: 0; padding: 8px 16px; }
+
 .start-card {
   max-width: 410px;
   padding: 8px 16px;
@@ -709,7 +781,51 @@ body {
 }
 
 .game-over-screen {
-  background: radial-gradient(ellipse at top, #450a0a, #0f172a 85%);
+  background: #000;
+}
+
+.defeat-art {
+  display: block;
+  grid-column: 1;
+  grid-row: 1 / 6;
+  align-self: center;
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.game-over-screen:not(.is-victory) .game-over-card {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 250px);
+  column-gap: 12px;
+  align-items: center;
+  padding: 6px;
+}
+
+.game-over-screen:not(.is-victory) .game-over-card > :not(img) {
+  grid-column: 2;
+}
+
+.game-over-screen:not(.is-victory) #game-over-title {
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.game-over-screen:not(.is-victory) .result-score {
+  margin: 4px 0 6px;
+}
+
+.game-over-screen:not(.is-victory) .play-button {
+  height: 24px;
+  width: auto;
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 8px;
+}
+
+.is-victory .defeat-art {
+  display: none;
 }
 
 .game-over-screen .start-eyebrow {

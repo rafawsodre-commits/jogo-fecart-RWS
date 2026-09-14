@@ -128,7 +128,7 @@
     SPEED_DROP_COEFFICIENT: 3,
     SPRINT_MAX_SPEED: 17,
     SPRINT_RECOVERY: 6,
-    STAMINA_DRAIN: 35,
+    STAMINA_DRAIN: 50,
     STAMINA_MAX: 100,
     STAMINA_REGEN: 14,
     CLONE_BASE_SPEED: 0.012,
@@ -145,7 +145,7 @@
     POWER_UP_STUN_DURATION: 2500,
     POWER_UP_BLUE_CHANCE: 0.3,
     POWER_UP_RED_CHANCE: 0.25,
-    // Temporary shortcut for testing the victory screen.
+    // Instant victory cube, available only in Dev mode.
     TEST_VICTORY_CUBE: true,
     POWER_UP_SLOW_PER_STACK: 0.15,
     POWER_UP_BLUE_FLASH_DURATION: 700,
@@ -265,6 +265,11 @@
     * Load and cache the image assets from the page.
     */
     loadImages: function() {
+    this.vaccineImages = {
+    yellow: document.getElementById('vaccine-yellow'),
+    blue: document.getElementById('vaccine-blue'),
+    red: document.getElementById('vaccine-green')
+    };
     var imageSources = IS_HIDPI ? Runner.imageSources.HDPI :
     Runner.imageSources.LDPI;
     var numImages = imageSources.length;
@@ -625,7 +630,7 @@
     var size = this.config.POWER_UP_SIZE;
     var distance = this.distanceMeter.getActualDistance(this.distanceRan);
     if (this.config.TEST_VICTORY_CUBE && this.testCubePending &&
-    this.gameMode === 'normal' && !this.tRex.jumping &&
+    this.gameMode === 'dev' && !this.tRex.jumping &&
     !this.powerUp && !this.hasPowerUp && !this.powerUpProjectile) {
     this.powerUp = {
     x: this.tRex.xPos + Trex.config.WIDTH + 24,
@@ -639,7 +644,7 @@
     distance >= this.nextPowerUpDistance) {
     var elevated = Math.random() > 0.5;
     var powerUpRoll = Math.random();
-    var redChance = this.gameMode === 'normal' ?
+    var redChance = this.gameMode !== 'infinite' ?
     this.config.POWER_UP_RED_CHANCE : 0;
     var powerUpType = powerUpRoll < redChance ?
     'red' : (powerUpRoll < redChance +
@@ -672,7 +677,7 @@
     }
     }
     if (this.powerUp) {
-    this.drawPowerUpCube(this.powerUp.x, this.powerUp.y, size,
+    this.drawPowerUpVaccine(this.powerUp.x, this.powerUp.y, size,
     this.powerUp.type);
     }
     if (this.powerUpProjectile) {
@@ -714,7 +719,7 @@
     }
     }
     if (this.powerUpProjectile) {
-    this.drawPowerUpCube(this.powerUpProjectile.x,
+    this.drawPowerUpVaccine(this.powerUpProjectile.x,
     this.powerUpProjectile.y, size, this.powerUpProjectile.type);
     }
     },
@@ -723,21 +728,27 @@
     this.nextPowerUpDistance = distance + getRandomNum(
     this.config.POWER_UP_MIN_GAP, this.config.POWER_UP_MAX_GAP);
     },
-    /** Draw a pixel-style power-up cube. */
-    drawPowerUpCube: function(x, y, size, type) {
-    var isBlue = type === 'blue';
-    var isRed = type === 'red';
-    this.canvasCtx.fillStyle = isRed ? '#22c55e' :
-    (isBlue ? '#38bdf8' : '#facc15');
-    this.canvasCtx.fillRect(Math.round(x), Math.round(y), size, size);
-    this.canvasCtx.fillStyle = isRed ? '#bbf7d0' :
-    (isBlue ? '#bae6fd' : '#fef08a');
-    this.canvasCtx.fillRect(Math.round(x) + 2, Math.round(y) + 2,
-    size - 5, 3);
-    this.canvasCtx.strokeStyle = isRed ? '#166534' :
-    (isBlue ? '#075985' : '#a16207');
-    this.canvasCtx.lineWidth = 2;
-    this.canvasCtx.strokeRect(Math.round(x), Math.round(y), size, size);
+    /** Draw the syringe, cropping the empty margins of the 64px assets. */
+    drawPowerUpVaccine: function(x, y, size, type) {
+    var vaccine = this.vaccineImages[type];
+    if (!vaccine || !vaccine.complete || !vaccine.naturalWidth) return;
+    var width = size * 2;
+    var height = Math.max(6, Math.round(width * 3 / 23));
+    var drawX = Math.round(x + (size - width) / 2);
+    var drawY = Math.round(y + (size - height) / 2);
+    this.canvasCtx.save();
+    this.canvasCtx.imageSmoothingEnabled = false;
+    this.canvasCtx.drawImage(vaccine, 21, 33, 23, 3,
+    drawX, drawY, width, height);
+    // Only the liquid occupies source pixels x=27..34, y=34.
+    if (type === 'red') {
+    var liquidLeft = Math.round(width * 6 / 23);
+    var liquidRight = Math.round(width * 14 / 23);
+    this.canvasCtx.fillStyle = '#22c55e';
+    this.canvasCtx.fillRect(drawX + liquidLeft,
+    drawY + height / 3, liquidRight - liquidLeft, height / 3);
+    }
+    this.canvasCtx.restore();
     },
     /** Draw the clone's six-point health meter. */
     drawCloneHealth: function() {
@@ -768,7 +779,7 @@
     /** Draw the stored power-up beside the stamina bar. */
     drawPowerUpIndicator: function() {
     if (this.hasPowerUp) {
-    this.drawPowerUpCube(148, 7, this.config.POWER_UP_SIZE,
+    this.drawPowerUpVaccine(148, 7, this.config.POWER_UP_SIZE,
     this.storedPowerUpType);
     }
     if (this.cloneSlowStacks > 0) {
@@ -779,15 +790,12 @@
     180 + this.canvasCtx.measureText('VIROCRATA-19').width + 8 +
     this.config.CLONE_MAX_HEALTH * 12 + 8;
     var slowY = 8;
-    this.canvasCtx.fillStyle = '#38bdf8';
-    this.canvasCtx.fillRect(slowX, slowY, 9, 9);
-    this.canvasCtx.strokeStyle = '#075985';
-    this.canvasCtx.strokeRect(slowX, slowY, 9, 9);
+    this.drawPowerUpVaccine(slowX, slowY, 9, 'blue');
     this.canvasCtx.fillStyle = '#38bdf8';
     this.canvasCtx.font = 'bold 11px monospace';
     this.canvasCtx.textBaseline = 'top';
     this.canvasCtx.fillText(slowLabel,
-    slowX + 12, slowY - 1);
+    slowX + 18, slowY - 1);
     }
     },
     /** Throw the stored cube backwards toward the clone. */
@@ -900,6 +908,7 @@
     * @param {Event} e
     */
     onKeyDown: function(e) {
+    if (isStartMenuOpen()) return;
     if (e.target != this.detailsButton) {
     if (!this.crashed && (Runner.keycodes.JUMP[String(e.keyCode)] ||
     e.type == Runner.events.TOUCHSTART)) {
@@ -941,6 +950,7 @@
     * @param {Event} e
     */
     onKeyUp: function(e) {
+    if (isStartMenuOpen()) return;
     var keyCode = String(e.keyCode);
     var isSpeedUp = Runner.keycodes.SPEED_UP[keyCode] ||
     e.key === 'ArrowRight';
@@ -1016,7 +1026,7 @@
     }
     }
     // Update the high score.
-    if (this.distanceRan > this.highestScore) {
+    if (this.gameMode === 'infinite' && this.distanceRan > this.highestScore) {
     this.highestScore = Math.ceil(this.distanceRan);
     this.distanceMeter.setHighScore(this.highestScore);
     }
@@ -1033,6 +1043,7 @@
     this.raqId = 0;
     },
     play: function() {
+    if (isStartMenuOpen()) return;
     if (!this.crashed) {
     this.activated = true;
     this.paused = false;
@@ -1419,7 +1430,7 @@
     * Coefficient for calculating the maximum gap.
     * @const
     */
-    Obstacle.MAX_GAP_COEFFICIENT = 1.5;
+    Obstacle.MAX_GAP_COEFFICIENT = 2.2;
     /**
     * Maximum obstacle grouping count.
     * @const
@@ -1437,7 +1448,7 @@
     this.size = 1;
     }
     this.width = this.typeConfig.width * this.size;
-    this.xPos = this.dimensions.WIDTH - this.width;
+    this.xPos = this.dimensions.WIDTH;
     this.draw();
     // Make collision box adjustments,
     // Central box is adjusted to the size as one box.
@@ -1497,7 +1508,16 @@
     var minGap = Math.round(this.width * speed +
     this.typeConfig.minGap * gapCoefficient);
     var maxGap = Math.round(minGap * Obstacle.MAX_GAP_COEFFICIENT);
-    return getRandomNum(minGap, maxGap);
+    // Mix tight sequences, regular gaps and occasional breathing room.
+    var spacing = Math.random();
+    if (spacing < 0.5) {
+    return getRandomNum(minGap, Math.round(minGap * 1.15));
+    }
+    if (spacing < 0.85) {
+    return getRandomNum(Math.round(minGap * 1.15),
+    Math.round(minGap * 1.6));
+    }
+    return getRandomNum(Math.round(minGap * 1.6), maxGap);
     },
     /**
     * Check if obstacle is visible.
@@ -1918,6 +1938,7 @@
     * @param {boolean} opt_highScore Whether drawing the high score.
     */
     draw: function(digitPos, value, opt_highScore) {
+    if (Runner.instance_.gameMode !== 'infinite') return;
     var sourceWidth = DistanceMeter.dimensions.WIDTH;
     var sourceHeight = DistanceMeter.dimensions.HEIGHT;
     var sourceX = DistanceMeter.dimensions.WIDTH * value;
@@ -1963,6 +1984,7 @@
     * @return {boolean} Whether the acheivement sound fx should be played.
     */
     update: function(deltaTime, distance) {
+    if (Runner.instance_.gameMode !== 'infinite') return false;
     var paint = true;
     var playSound = false;
     if (!this.acheivement) {
@@ -2439,6 +2461,9 @@ var gameOverScreen = document.getElementById('game-over-screen');
 var restartButton = document.getElementById('restart-button');
 var menuButton = document.getElementById('menu-button');
 var modeButtons = document.querySelectorAll('[data-game-mode]');
+var devDialog = document.getElementById('dev-dialog');
+var devPassword = document.getElementById('dev-password');
+var devError = document.getElementById('dev-error');
 var mobileControls = document.getElementById('mobile-controls');
 var mobilePointers = new Map();
 
@@ -2512,8 +2537,9 @@ function showGameOverScreen(won, score) {
     won ? 'VOCÊ VENCEU O VÍRUS. MAS SOBREVIVER NÃO DEVERIA SER UM PRIVILÉGIO.' : 'O VIROCRATA-19 TE PEGOU!';
   document.getElementById('result-message').textContent = won ?
     'Quantos ainda precisam morrer para a saúde virar prioridade do governo?' :
-    'Use os cubos e a corrida para escapar na próxima tentativa.';
+    'Use as vacinas e a corrida para escapar na próxima tentativa.';
   document.getElementById('result-score').textContent = 'PONTUAÇÃO: ' + score;
+  document.getElementById('result-score').hidden = runner.gameMode !== 'infinite';
   restartButton.textContent = '↻ TENTAR NOVAMENTE';
   gameOverScreen.classList.remove('is-hidden');
   restartButton.focus({ preventScroll: true });
@@ -2541,10 +2567,41 @@ function startFromMenu(mode) {
   }
 }
 
+function isStartMenuOpen() {
+  var menu = document.getElementById('start-screen');
+  return menu && !menu.classList.contains('is-hidden');
+}
+
+document.getElementById('dev-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  if (devPassword.value !== 'Ronald<>Tuffano007!') {
+    devError.textContent = 'Senha incorreta. Tente novamente.';
+    devPassword.value = '';
+    devPassword.focus();
+    return;
+  }
+  devDialog.close();
+  startFromMenu('dev');
+});
+
+document.getElementById('dev-cancel').addEventListener('click', function() {
+  devDialog.close();
+});
+
+devDialog.addEventListener('close', function() {
+  devPassword.value = '';
+  devError.textContent = '';
+});
+
 for (var modeButtonIndex = 0; modeButtonIndex < modeButtons.length;
   modeButtonIndex++) {
   modeButtons[modeButtonIndex].addEventListener('click', function(e) {
     e.stopPropagation();
+    if (this.getAttribute('data-game-mode') === 'dev') {
+      devDialog.showModal();
+      devPassword.focus();
+      return;
+    }
     startFromMenu(this.getAttribute('data-game-mode'));
   });
 }
@@ -2556,6 +2613,7 @@ restartButton.addEventListener('click', function(e) {
 
 menuButton.addEventListener('click', function(e) {
   e.stopPropagation();
+  runner.gameMode = 'normal';
   runner.restart();
   runner.stop();
   hideGameOverScreen();
