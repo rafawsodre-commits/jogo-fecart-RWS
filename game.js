@@ -56,12 +56,14 @@
     this.cloneFrozenX = null;
     this.cloneFrozenSourceX = 0;
     this.cloneSlowStacks = 0;
+    this.blueVaccinesCollected = 0;
+    this.hasVirusShield = false;
     this.cloneBlueFlashRemaining = 0;
     this.cloneHealth = this.config.CLONE_MAX_HEALTH;
     this.cloneDefeated = false;
     this.gameMode = 'normal';
     this.nextPowerUpDistance = 80;
-    this.testCubePending = true;
+    this.testShieldPending = true;
     this.msPerFrame = 1000 / FPS;
     this.currentSpeed = this.config.SPEED;
     this.obstacles = [];
@@ -114,7 +116,7 @@
     DISTANCE_SPEED_CAP: 15,
     DISTANCE_SPEED_STEP: 0.5,
     GAMEOVER_CLEAR_TIME: 750,
-    GAP_COEFFICIENT: 1,
+    GAP_COEFFICIENT: 1.8,
     GRAVITY: 0.6,
     INITIAL_JUMP_VELOCITY: 12,
     MAX_CLOUDS: 6,
@@ -141,13 +143,15 @@
     POWER_UP_MIN_GAP: 90,
     POWER_UP_MAX_GAP: 170,
     POWER_UP_SIZE: 14,
+    POWER_UP_OBSTACLE_CLEARANCE: 100,
     POWER_UP_PROJECTILE_SPEED: 0.38,
     POWER_UP_STUN_DURATION: 2500,
     POWER_UP_BLUE_CHANCE: 0.3,
     POWER_UP_RED_CHANCE: 0.25,
-    // Instant victory cube, available only in Dev mode.
-    TEST_VICTORY_CUBE: true,
+    // Instant shield syringe, available only in Dev mode.
+    TEST_SHIELD_SYRINGE: true,
     POWER_UP_SLOW_PER_STACK: 0.15,
+    BLUE_VACCINES_FOR_SHIELD: 3,
     POWER_UP_BLUE_FLASH_DURATION: 700,
     CLONE_MAX_HEALTH: 6
     };
@@ -176,8 +180,10 @@
     */
     Runner.imageSources = {
     LDPI: [
+    {name: 'SHIELD_ACTIVATION', id: 'paciente-shield-sprite'},
+    {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
-    {name: 'GROUND', id: 'custom-ground'},
+    {name: 'GROUND', id: 'corridor-scenery'},
     {name: 'CACTUS_LARGE', id: '1x-obstacle-large'},
     {name: 'CACTUS_SMALL', id: '1x-obstacle-small'},
     {name: 'CLOUD', id: '1x-cloud'},
@@ -187,8 +193,10 @@
     {name: 'TREX', id: 'gulosin-sprite'}
     ],
     HDPI: [
+    {name: 'SHIELD_ACTIVATION', id: 'paciente-shield-sprite'},
+    {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
-    {name: 'GROUND', id: 'custom-ground'},
+    {name: 'GROUND', id: 'corridor-scenery'},
     {name: 'CACTUS_LARGE', id: '2x-obstacle-large'},
     {name: 'CACTUS_SMALL', id: '2x-obstacle-small'},
     {name: 'CLOUD', id: '2x-cloud'},
@@ -471,6 +479,7 @@
     this.playIntro();
     }
     // The horizon doesn't move until the intro is over.
+    this.horizon.reservedPowerUp = this.powerUp;
     if (this.playingIntro) {
     this.horizon.update(0, this.currentSpeed, hasObstacles);
     } else {
@@ -577,8 +586,12 @@
     }
     if (this.started && this.cloneStunRemaining <= 0 &&
     companionX + Trex.config.WIDTH >= this.tRex.xPos) {
+    if (this.absorbVirusCapture()) {
+    companionX = this.cloneFrozenX;
+    } else {
     this.gameOver();
     return;
+    }
     }
     var cloneSize = 100;
     var cloneDrawX = companionX + Trex.config.WIDTH - cloneSize;
@@ -605,6 +618,30 @@
     this.canvasCtx.fillRect(barrierX,
     this.tRex.groundYPos - 12, 10, 59);
     },
+    /** Each cycle of three blue pickups grants one shield, without stacking. */
+    collectBlueVaccine: function(instantShield) {
+    if (this.blueVaccinesCollected >= this.config.BLUE_VACCINES_FOR_SHIELD) return;
+    this.blueVaccinesCollected = instantShield && this.gameMode === 'dev' ?
+    this.config.BLUE_VACCINES_FOR_SHIELD : this.blueVaccinesCollected + 1;
+    if (this.blueVaccinesCollected === this.config.BLUE_VACCINES_FOR_SHIELD) {
+    this.hasVirusShield = true;
+    this.tRex.shieldAnimationTime = 0;
+    }
+    },
+    absorbVirusCapture: function() {
+    if (!this.hasVirusShield) return false;
+    this.hasVirusShield = false;
+    this.blueVaccinesCollected = 0;
+    this.cloneSlowStacks = 0;
+    this.cloneBlueFlashRemaining = 0;
+    this.companionXPos = -Trex.config.WIDTH;
+    this.companionGap = 0;
+    this.companionDrawX = this.companionXPos;
+    this.cloneFrozenX = this.companionXPos;
+    this.cloneFrozenSourceX = this.cloneSourceX;
+    this.cloneStunRemaining = 1000;
+    return true;
+    },
     /** Update, collect and draw the yellow cube power-up. */
     updatePowerUp: function(deltaTime) {
     if (!this.started) {
@@ -629,19 +666,22 @@
     }
     var size = this.config.POWER_UP_SIZE;
     var distance = this.distanceMeter.getActualDistance(this.distanceRan);
-    if (this.config.TEST_VICTORY_CUBE && this.testCubePending &&
+    var movement = this.horizon.obstacleMovement || 0;
+    if (this.config.TEST_SHIELD_SYRINGE && this.testShieldPending &&
     this.gameMode === 'dev' && !this.tRex.jumping &&
-    !this.powerUp && !this.hasPowerUp && !this.powerUpProjectile) {
+    !this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
+    this.isPowerUpPositionClear(this.tRex.xPos + Trex.config.WIDTH + 24 - movement)) {
     this.powerUp = {
     x: this.tRex.xPos + Trex.config.WIDTH + 24,
     y: this.tRex.groundYPos + Trex.config.HEIGHT - size,
-    type: 'red',
-    instantKill: true
+    type: 'blue',
+    instantShield: true
     };
-    this.testCubePending = false;
+    this.testShieldPending = false;
     }
     if (!this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
-    distance >= this.nextPowerUpDistance) {
+    distance >= this.nextPowerUpDistance &&
+    this.isPowerUpPositionClear(this.dimensions.WIDTH - movement)) {
     var elevated = Math.random() > 0.5;
     var powerUpRoll = Math.random();
     var redChance = this.gameMode !== 'infinite' ?
@@ -657,8 +697,7 @@
     };
     }
     if (this.powerUp) {
-    this.powerUp.x -= Math.floor((this.currentSpeed * FPS / 1000) *
-    deltaTime);
+    this.powerUp.x -= movement;
     var playerLeft = this.tRex.xPos;
     var playerTop = this.tRex.yPos;
     if (playerLeft < this.powerUp.x + size &&
@@ -667,7 +706,9 @@
     playerTop + Trex.config.HEIGHT > this.powerUp.y) {
     this.hasPowerUp = true;
     this.storedPowerUpType = this.powerUp.type;
-    this.storedPowerUpInstantKill = this.powerUp.instantKill === true;
+    if (this.powerUp.type === 'blue') {
+    this.collectBlueVaccine(this.powerUp.instantShield === true);
+    }
     this.powerUp = null;
     this.scheduleNextPowerUp(distance);
     this.playSound(this.soundFx.SCORE);
@@ -693,8 +734,7 @@
     this.powerUpProjectile.y < this.tRex.groundYPos + Trex.config.HEIGHT &&
     this.powerUpProjectile.y + size > this.tRex.groundYPos) {
     if (this.powerUpProjectile.type === 'red') {
-    this.cloneHealth = this.powerUpProjectile.instantKill ? 0 :
-    Math.max(0, this.cloneHealth - 1);
+    this.cloneHealth = Math.max(0, this.cloneHealth - 1);
     if (this.cloneHealth === 0) {
     this.cloneDefeated = true;
     this.cloneStunRemaining = 0;
@@ -704,7 +744,8 @@
     return;
     }
     } else if (this.powerUpProjectile.type === 'blue') {
-    this.cloneSlowStacks++;
+    this.cloneSlowStacks = Math.min(this.config.BLUE_VACCINES_FOR_SHIELD,
+    this.cloneSlowStacks + 1);
     this.cloneBlueFlashRemaining =
     this.config.POWER_UP_BLUE_FLASH_DURATION;
     } else {
@@ -722,6 +763,15 @@
     this.drawPowerUpVaccine(this.powerUpProjectile.x,
     this.powerUpProjectile.y, size, this.powerUpProjectile.type);
     }
+    },
+    /** Reserve room for the full syringe sprite and a safe approach. */
+    isPowerUpPositionClear: function(x) {
+    var size = this.config.POWER_UP_SIZE;
+    var margin = this.config.POWER_UP_OBSTACLE_CLEARANCE;
+    return this.horizon.obstacles.every(function(obstacle) {
+    return x + size * 1.5 + margin <= obstacle.xPos ||
+    x - size * 0.5 - margin >= obstacle.xPos + obstacle.width;
+    });
     },
     /** Choose the score at which another cube may appear. */
     scheduleNextPowerUp: function(distance) {
@@ -778,6 +828,25 @@
     },
     /** Draw the stored power-up beside the stamina bar. */
     drawPowerUpIndicator: function() {
+    this.canvasCtx.save();
+    this.canvasCtx.font = 'bold 10px monospace';
+    this.canvasCtx.textBaseline = 'top';
+    this.canvasCtx.fillStyle = '#0369a1';
+    var shieldLabel = this.hasVirusShield ? 'ESCUDO ATIVO' :
+    'AZUIS: ' + this.blueVaccinesCollected + '/' +
+    this.config.BLUE_VACCINES_FOR_SHIELD;
+    this.canvasCtx.fillText(shieldLabel, 8, 26);
+    if (this.hasVirusShield) {
+    this.canvasCtx.strokeStyle = '#38bdf8';
+    this.canvasCtx.lineWidth = 2;
+    this.canvasCtx.beginPath();
+    this.canvasCtx.ellipse(this.tRex.xPos + Trex.config.WIDTH / 2,
+    this.tRex.yPos + Trex.config.HEIGHT / 2,
+    Trex.config.WIDTH / 2 + 5, Trex.config.HEIGHT / 2 + 5,
+    0, 0, Math.PI * 2);
+    this.canvasCtx.stroke();
+    }
+    this.canvasCtx.restore();
     if (this.hasPowerUp) {
     this.drawPowerUpVaccine(148, 7, this.config.POWER_UP_SIZE,
     this.storedPowerUpType);
@@ -807,8 +876,7 @@
     this.powerUpProjectile = {
     x: this.tRex.xPos - this.config.POWER_UP_SIZE,
     y: this.tRex.yPos + Math.floor(Trex.config.HEIGHT / 2),
-    type: this.storedPowerUpType,
-    instantKill: this.storedPowerUpInstantKill === true
+    type: this.storedPowerUpType
     };
     this.storedPowerUpType = null;
     this.playSound(this.soundFx.BUTTON_PRESS);
@@ -837,19 +905,26 @@
     }
     }
     },
-    /** Draw the sprint energy bar. */
+    /** Draw sprint energy as ten individual cubes. */
     drawStaminaBar: function() {
-    var width = 120;
-    var height = 8;
+    var cubes = 10;
+    var size = 10;
+    var gap = 2;
     var x = 18;
-    var y = 10;
-    var filledWidth = width * this.stamina / this.config.STAMINA_MAX;
-    this.canvasCtx.fillStyle = '#0f172a';
-    this.canvasCtx.fillRect(x, y, width, height);
-    this.canvasCtx.fillStyle = this.stamina > 30 ? '#22d3ee' : '#fbbf24';
-    this.canvasCtx.fillRect(x, y, filledWidth, height);
-    this.canvasCtx.strokeStyle = '#e0f2fe';
-    this.canvasCtx.strokeRect(x, y, width, height);
+    var y = 9;
+    var filledCubes = Math.ceil(cubes * Math.max(0,
+    Math.min(1, this.stamina / this.config.STAMINA_MAX)));
+    this.canvasCtx.save();
+    for (var i = 0; i < cubes; i++) {
+    var cubeX = x + i * (size + gap);
+    this.canvasCtx.fillStyle = i < filledCubes ?
+    (this.stamina > 30 ? '#22d3ee' : '#fbbf24') : '#dbe4ea';
+    this.canvasCtx.fillRect(cubeX, y, size, size);
+    this.canvasCtx.strokeStyle = '#64748b';
+    this.canvasCtx.lineWidth = 1;
+    this.canvasCtx.strokeRect(cubeX + 0.5, y + 0.5, size - 1, size - 1);
+    }
+    this.canvasCtx.restore();
     },
     /**
     * Event handler.
@@ -1075,12 +1150,13 @@
     this.cloneFrozenX = null;
     this.cloneFrozenSourceX = 0;
     this.cloneSlowStacks = 0;
+    this.blueVaccinesCollected = 0;
+    this.hasVirusShield = false;
     this.cloneBlueFlashRemaining = 0;
     this.cloneHealth = this.config.CLONE_MAX_HEALTH;
     this.cloneDefeated = false;
     this.nextPowerUpDistance = getRandomNum(60, 100);
-    this.testCubePending = true;
-    this.storedPowerUpInstantKill = false;
+    this.testShieldPending = true;
     this.activated = true;
     this.crashed = false;
     this.distanceRan = 0;
@@ -1090,6 +1166,7 @@
     this.clearCanvas();
     this.distanceMeter.reset(this.highestScore);
     this.horizon.reset();
+    this.tRex.shieldAnimationTime = null;
     this.tRex.reset();
     this.playSound(this.soundFx.BUTTON_PRESS);
     this.update();
@@ -1508,12 +1585,12 @@
     var minGap = Math.round(this.width * speed +
     this.typeConfig.minGap * gapCoefficient);
     var maxGap = Math.round(minGap * Obstacle.MAX_GAP_COEFFICIENT);
-    // Mix tight sequences, regular gaps and occasional breathing room.
+    // Favor regular and generous gaps to allow more time between jumps.
     var spacing = Math.random();
-    if (spacing < 0.5) {
+    if (spacing < 0.2) {
     return getRandomNum(minGap, Math.round(minGap * 1.15));
     }
-    if (spacing < 0.85) {
+    if (spacing < 0.75) {
     return getRandomNum(Math.round(minGap * 1.15),
     Math.round(minGap * 1.6));
     }
@@ -1582,6 +1659,7 @@
     * @constructor
     */
     function Trex(canvas, image) {
+    this.shieldAnimationTime = null;
     this.canvas = canvas;
     this.canvasCtx = canvas.getContext('2d');
     this.image = image;
@@ -1740,6 +1818,12 @@
     this.draw(this.currentAnimFrames[this.currentFrame], 0);
     }
     // Update the frame position.
+    if (this.shieldAnimationTime !== null) {
+    this.shieldAnimationTime += deltaTime;
+    if (this.shieldAnimationTime >= 9 * 140) {
+    this.shieldAnimationTime = null;
+    }
+    }
     if (this.timer >= this.msPerFrame) {
     this.currentFrame = (this.currentFrame +
     Math.floor(this.timer / this.msPerFrame)) % this.currentAnimFrames.length;
@@ -1754,7 +1838,13 @@
     draw: function(x, y) {
     this.canvasCtx.save();
     this.canvasCtx.imageSmoothingEnabled = false;
-    this.canvasCtx.drawImage(this.image, x, y, 47, 47,
+    var characterImage = this.image;
+    if (this.shieldAnimationTime !== null && this.status !== Trex.status.CRASHED) {
+    characterImage = Runner.instance_.images.SHIELD_ACTIVATION;
+    x = Math.min(8, Math.floor(this.shieldAnimationTime / 140)) * 47;
+    y = 0;
+    }
+    this.canvasCtx.drawImage(characterImage, x, y, 47, 47,
     this.xPos, this.yPos,
     this.config.WIDTH, this.config.HEIGHT);
     this.canvasCtx.restore();
@@ -2148,8 +2238,9 @@
     * @param {HTMLImage} bgImg Horizon line sprite.
     * @constructor
     */
-    function HorizonLine(canvas, bgImg) {
+    function HorizonLine(canvas, bgImg, pictureImg) {
     this.image = bgImg;
+    this.pictureImage = pictureImg;
     this.canvas = canvas;
     this.canvasCtx = canvas.getContext('2d');
     this.sourceDimensions = {};
@@ -2200,6 +2291,10 @@
     * Draw the horizon line.
     */
     draw: function() {
+    if (this.image.id === 'corridor-scenery') {
+    this.drawCorridor();
+    return;
+    }
     if (this.image.id === 'custom-ground') {
     this.drawCustomGround(this.xPos[0]);
     this.drawCustomGround(this.xPos[1]);
@@ -2232,6 +2327,85 @@
     nextX += this.dimensions.WIDTH;
     }
     },
+    /** A continuous corridor with individually spaced hospital details. */
+    drawCorridor: function() {
+    var ctx = this.canvasCtx;
+    var width = Runner.defaultDimensions.WIDTH;
+    var travel = this.corridorTravel || 0;
+    if (!this.corridorSections) {
+    this.corridorSections = [];
+    this.corridorEnd = 0;
+    this.corridorIndex = 0;
+    }
+    while (this.corridorEnd < travel + width + 360) {
+    var index = this.corridorIndex++;
+    var seed = Math.abs(Math.sin(index * 127.1 + 311.7) * 43758.5453) % 1;
+    var variant = (index + Math.floor(seed * 4)) % 5;
+    var previous = this.corridorSections[this.corridorSections.length - 1];
+    if (previous && previous.variant === variant) variant = (variant + 1) % 5;
+    var length = 340 + Math.floor(seed * 180);
+    this.corridorSections.push({x: this.corridorEnd, width: length,
+    variant: variant, seed: seed,
+    picture: Math.random() < 0.65,
+    pictureX: 210 + Math.random() * (length - 260),
+    pictureY: 53 + Math.random() * 15});
+    this.corridorEnd += length;
+    }
+    this.corridorSections = this.corridorSections.filter(function(section) {
+    return section.x + section.width > travel - 40;
+    });
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, this.yPos);
+    ctx.fillStyle = '#c4d5da';
+    ctx.fillRect(0, this.yPos, width, 23);
+    ctx.fillStyle = '#799da8';
+    ctx.fillRect(0, this.yPos - 4, width, 4);
+    ctx.fillStyle = '#a6bec6';
+    ctx.fillRect(0, this.yPos + 12, width, 1);
+    var scenery = this.image;
+    // Keep doors near the player's height, with all decor on the same scale.
+    var sceneryScale = 0.75;
+    var baseline = this.yPos;
+    function detail(sx, sy, sw, sh, x, bottom, scale) {
+    scale *= sceneryScale;
+    bottom = baseline - (baseline - bottom) * sceneryScale;
+    ctx.drawImage(scenery, sx, sy, sw, sh,
+    x, Math.round(bottom - sh * scale),
+    Math.round(sw * scale), Math.round(sh * scale));
+    }
+    for (var i = 0; i < this.corridorSections.length; i++) {
+    var section = this.corridorSections[i];
+    var x = section.x - travel;
+    if (section.picture && this.pictureImage) {
+    // Crop the empty upper part; keep the frame and hanging cord together.
+    ctx.drawImage(this.pictureImage, 0, 105, 100, 90,
+    x + section.pictureX, section.pictureY, 34, 30.6);
+    }
+    var doorX = x + 28 + Math.floor(section.seed * 30);
+    detail(332, 427, 32, 86, doorX, this.yPos, 0.9);
+    if (section.variant === 0) {
+    detail(389, 466, 121, 47, x + 115, this.yPos, 0.85);
+    } else if (section.variant === 1) {
+    detail(689, 479, 119, 34, x + 125, this.yPos, 0.85);
+    detail(680, 427, 16, 29, doorX + 48, 83, 0.8);
+    } else if (section.variant === 2) {
+    detail(479, 667, 63, 22, doorX - 10, 43, 0.8);
+    detail(479, 726, 32, 39, x + 140, 88, 0.7);
+    } else if (section.variant === 3) {
+    detail(68, 754, 21, 59, x + 145, this.yPos, 0.85);
+    detail(76, 672, 40, 18, x + 120, 39, 0.8);
+    } else {
+    detail(389, 792, 112, 21, x + 130, this.yPos, 0.9);
+    }
+    }
+    // Soften fine, high-contrast details without affecting gameplay sprites.
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#e8ede9';
+    ctx.fillRect(0, 0, width, this.yPos);
+    ctx.restore();
+    },
     /** Draw only the painted bottom strip from the custom 600px sprite. */
     drawCustomGround: function(x) {
     this.canvasCtx.drawImage(this.image, 0, 500, 600, 100,
@@ -2260,6 +2434,17 @@
     */
     update: function(deltaTime, speed) {
     var increment = Math.floor(speed * (FPS / 1000) * deltaTime);
+    if (this.image.id === 'corridor-scenery') {
+    if (!this.sceneryMotionPreference && window.matchMedia) {
+    this.sceneryMotionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    }
+    var scenerySpeed = this.sceneryMotionPreference &&
+    this.sceneryMotionPreference.matches ? 0 : 0.15;
+    this.corridorTravel = (this.corridorTravel || 0) +
+    speed * (FPS / 1000) * Math.min(deltaTime, 50) * scenerySpeed;
+    this.draw();
+    return;
+    }
     if (this.xPos[0] <= 0) {
     this.updateXPos(0, increment);
     } else {
@@ -2273,6 +2458,8 @@
     reset: function() {
     this.xPos[0] = 0;
     this.xPos[1] = HorizonLine.dimensions.WIDTH;
+    this.corridorTravel = 0;
+    this.corridorSections = null;
     }
     };
     //******************************************************************************
@@ -2299,6 +2486,7 @@
     this.cloudSpeed = this.config.BG_CLOUD_SPEED;
     // Horizon
     this.horizonImg = images.GROUND || images.HORIZON;
+    this.pictureImg = images.WALL_PICTURE;
     this.horizonLine = null;
     // Obstacles
     this.obstacleImgs = {
@@ -2320,11 +2508,11 @@
     };
     Horizon.prototype = {
     /**
-    * Initialise the horizon. Just add the line and a cloud. No obstacles.
+    * Initialise the horizon line. No obstacles.
     */
     init: function() {
-    this.addCloud();
-    this.horizonLine = new HorizonLine(this.canvas, this.horizonImg);
+    this.horizonLine = new HorizonLine(this.canvas, this.horizonImg,
+    this.pictureImg);
     },
     /**
     * @param {number} deltaTime
@@ -2334,9 +2522,10 @@
     * ease in section.
     */
     update: function(deltaTime, currentSpeed, updateObstacles) {
+    this.obstacleMovement = updateObstacles ?
+    Math.floor(currentSpeed * FPS / 1000 * deltaTime) : 0;
     this.runningTime += deltaTime;
     this.horizonLine.update(deltaTime, currentSpeed);
-    this.updateClouds(deltaTime, currentSpeed);
     if (updateObstacles) {
     this.updateObstacles(deltaTime, currentSpeed);
     }
@@ -2389,8 +2578,7 @@
     lastObstacle.isVisible() &&
     (lastObstacle.xPos + lastObstacle.width + lastObstacle.gap) <
     this.dimensions.WIDTH) {
-    this.addNewObstacle(currentSpeed);
-    lastObstacle.followingObstacleCreated = true;
+    lastObstacle.followingObstacleCreated = this.addNewObstacle(currentSpeed);
     }
     } else {
     // Create new obstacles.
@@ -2402,12 +2590,18 @@
     * @param {number} currentSpeed
     */
     addNewObstacle: function(currentSpeed) {
+    var pickup = this.reservedPowerUp;
+    if (pickup && pickup.x + Runner.config.POWER_UP_SIZE * 1.5 +
+    Runner.config.POWER_UP_OBSTACLE_CLEARANCE > this.dimensions.WIDTH) {
+    return false;
+    }
     var obstacleTypeIndex =
     getRandomNum(0, Obstacle.types.length - 1);
     var obstacleType = Obstacle.types[obstacleTypeIndex];
     var obstacleImg = this.obstacleImgs[obstacleType.type];
     this.obstacles.push(new Obstacle(this.canvasCtx, obstacleType,
     obstacleImg, this.dimensions, this.gapCoefficient, currentSpeed));
+    return true;
     },
     /**
     * Reset the horizon layer.
@@ -2416,6 +2610,8 @@
     reset: function() {
     this.obstacles = [];
     this.horizonLine.reset();
+    this.reservedPowerUp = null;
+    this.obstacleMovement = 0;
     },
     /**
     * Update the canvas width and scaling.
