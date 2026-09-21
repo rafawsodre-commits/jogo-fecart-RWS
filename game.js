@@ -76,6 +76,8 @@
     // Sound FX.
     this.audioBuffer = null;
     this.soundFx = {};
+    this.footstepTime = 0;
+    this.footstepSide = false;
     // Global web audio context for playing sounds.
     this.audioContext = null;
     // Images.
@@ -108,6 +110,8 @@
     * @enum {number}
     */
     Runner.config = {
+    SOUND_ENABLED: false,
+    FOOTSTEP_SOUNDS: false,
     ACCELERATION: 0.003,
     BG_CLOUD_SPEED: 0.2,
     BOTTOM_PAD: 10,
@@ -147,11 +151,12 @@
     POWER_UP_PROJECTILE_SPEED: 0.38,
     POWER_UP_STUN_DURATION: 2500,
     POWER_UP_BLUE_CHANCE: 0.3,
-    POWER_UP_RED_CHANCE: 0.25,
-    // Instant shield syringe, available only in Dev mode.
+    POWER_UP_RED_CHANCE: 0.45,
+    // Starter blue syringe, available only in Dev mode.
     TEST_SHIELD_SYRINGE: true,
     POWER_UP_SLOW_PER_STACK: 0.15,
     BLUE_VACCINES_FOR_SHIELD: 3,
+    MAX_CLONE_SLOW_STACKS: 3,
     POWER_UP_BLUE_FLASH_DURATION: 700,
     CLONE_MAX_HEALTH: 6
     };
@@ -180,6 +185,7 @@
     */
     Runner.imageSources = {
     LDPI: [
+    {name: 'THROW', id: 'paciente-throw-sprite'},
     {name: 'SHIELD_ACTIVATION', id: 'paciente-shield-sprite'},
     {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
@@ -193,6 +199,7 @@
     {name: 'TREX', id: 'gulosin-sprite'}
     ],
     HDPI: [
+    {name: 'THROW', id: 'paciente-throw-sprite'},
     {name: 'SHIELD_ACTIVATION', id: 'paciente-shield-sprite'},
     {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
@@ -213,7 +220,12 @@
     Runner.sounds = {
     BUTTON_PRESS: 'offline-sound-press',
     HIT: 'offline-sound-hit',
-    SCORE: 'offline-sound-reached'
+    SCORE: 'offline-sound-reached',
+    THROW: 'sound-throw',
+    VACCINE_PICKUP: 'sound-vaccine-pickup',
+    VACCINE_HIT: 'sound-vaccine-hit',
+    STEP_ONE: 'sound-step-one',
+    STEP_TWO: 'sound-step-two'
     };
     /**
     * Key code mapping.
@@ -291,8 +303,10 @@
     * Load and decode base 64 encoded sounds.
     */
     loadSounds: function() {
-    if (!IS_IOS) {
-    this.audioContext = new AudioContext();
+    if (!this.config.SOUND_ENABLED) return;
+    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+    this.audioContext = this.audioContext || new AudioContextClass();
     var resourceTemplate =
     document.getElementById(this.config.RESOURCE_TEMPLATE_ID).content;
     for (var sound in Runner.sounds) {
@@ -303,7 +317,7 @@
     // Async, so no guarantee of order in array.
     this.audioContext.decodeAudioData(buffer, function(index, audioData) {
     this.soundFx[index] = audioData;
-    }.bind(this, sound));
+    }.bind(this, sound), function() {});
     }
     }
     },
@@ -468,6 +482,7 @@
     this.time = now;
     if (this.activated) {
     this.updateStamina(deltaTime);
+    this.updateFootsteps(deltaTime);
     this.clearCanvas();
     if (this.tRex.jumping) {
     this.tRex.updateJump(deltaTime, this.config);
@@ -618,22 +633,21 @@
     this.canvasCtx.fillRect(barrierX,
     this.tRex.groundYPos - 12, 10, 59);
     },
-    /** Each cycle of three blue pickups grants one shield, without stacking. */
-    collectBlueVaccine: function(instantShield) {
+    /** The third blue pickup activates the special animation and one shield. */
+    collectBlueVaccine: function() {
     if (this.blueVaccinesCollected >= this.config.BLUE_VACCINES_FOR_SHIELD) return;
-    this.blueVaccinesCollected = instantShield && this.gameMode === 'dev' ?
-    this.config.BLUE_VACCINES_FOR_SHIELD : this.blueVaccinesCollected + 1;
+    this.blueVaccinesCollected++;
     if (this.blueVaccinesCollected === this.config.BLUE_VACCINES_FOR_SHIELD) {
     this.hasVirusShield = true;
     this.tRex.shieldAnimationTime = 0;
+    this.tRex.throwAnimationTime = null;
     }
     },
     absorbVirusCapture: function() {
     if (!this.hasVirusShield) return false;
     this.hasVirusShield = false;
     this.blueVaccinesCollected = 0;
-    this.cloneSlowStacks = 0;
-    this.cloneBlueFlashRemaining = 0;
+    // Consuming the player's shield does not remove vaccine hits on the clone.
     this.companionXPos = -Trex.config.WIDTH;
     this.companionGap = 0;
     this.companionDrawX = this.companionXPos;
@@ -674,19 +688,19 @@
     this.powerUp = {
     x: this.tRex.xPos + Trex.config.WIDTH + 24,
     y: this.tRex.groundYPos + Trex.config.HEIGHT - size,
-    type: 'blue',
-    instantShield: true
+    type: 'blue'
     };
     this.testShieldPending = false;
     }
     if (!this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
     distance >= this.nextPowerUpDistance &&
     this.isPowerUpPositionClear(this.dimensions.WIDTH - movement)) {
-    var elevated = Math.random() > 0.5;
+    var isDevShieldTest = this.gameMode === 'dev';
+    var elevated = !isDevShieldTest && Math.random() > 0.5;
     var powerUpRoll = Math.random();
     var redChance = this.gameMode !== 'infinite' ?
     this.config.POWER_UP_RED_CHANCE : 0;
-    var powerUpType = powerUpRoll < redChance ?
+    var powerUpType = isDevShieldTest ? 'blue' : powerUpRoll < redChance ?
     'red' : (powerUpRoll < redChance +
     this.config.POWER_UP_BLUE_CHANCE ? 'blue' : 'yellow');
     this.powerUp = {
@@ -707,11 +721,11 @@
     this.hasPowerUp = true;
     this.storedPowerUpType = this.powerUp.type;
     if (this.powerUp.type === 'blue') {
-    this.collectBlueVaccine(this.powerUp.instantShield === true);
+    this.collectBlueVaccine();
     }
     this.powerUp = null;
     this.scheduleNextPowerUp(distance);
-    this.playSound(this.soundFx.SCORE);
+    this.playSound(this.soundFx.VACCINE_PICKUP, 0.018, 0.12, 1.2);
     } else if (this.powerUp.x + size < 0) {
     this.powerUp = null;
     this.scheduleNextPowerUp(distance);
@@ -744,7 +758,7 @@
     return;
     }
     } else if (this.powerUpProjectile.type === 'blue') {
-    this.cloneSlowStacks = Math.min(this.config.BLUE_VACCINES_FOR_SHIELD,
+    this.cloneSlowStacks = Math.min(this.config.MAX_CLONE_SLOW_STACKS,
     this.cloneSlowStacks + 1);
     this.cloneBlueFlashRemaining =
     this.config.POWER_UP_BLUE_FLASH_DURATION;
@@ -754,7 +768,7 @@
     this.cloneFrozenSourceX = this.cloneSourceX;
     }
     this.powerUpProjectile = null;
-    this.playSound(this.soundFx.HIT);
+    this.playSound(this.soundFx.VACCINE_HIT, 0.015, 0.09, 0.8);
     } else if (this.powerUpProjectile.x + size < 0) {
     this.powerUpProjectile = null;
     }
@@ -800,43 +814,44 @@
     }
     this.canvasCtx.restore();
     },
-    /** Draw the clone's six-point health meter. */
-    drawCloneHealth: function() {
-    var x = 180;
-    var y = 8;
-    var blockSize = 9;
-    var gap = 3;
-    this.canvasCtx.font = 'bold 10px monospace';
-    this.canvasCtx.textBaseline = 'top';
-    var isInfinite = this.gameMode === 'infinite';
-    this.canvasCtx.fillStyle = this.cloneDefeated ? '#64748b' :
-    (isInfinite ? '#0369a1' : '#991b1b');
-    this.canvasCtx.fillText(this.cloneDefeated ? 'VIROCRATA-19 DERROTADO' :
-    (isInfinite ? 'VIROCRATA-19 INFINITO' : 'VIROCRATA-19'),
-    x, y);
-    if (this.cloneDefeated || isInfinite) {
-    return;
+    /** Keep the HUD in screen pixels so text stays crisp as the scene scales. */
+    getHud: function() {
+    if (!this.hud) {
+    this.hud = {};
+    ['game-hud', 'hud-stamina', 'hud-special', 'hud-slow', 'hud-held',
+    'hud-enemy-label', 'hud-health-track', 'hud-health', 'hud-score'].forEach(function(id) {
+    this.hud[id] = document.getElementById(id);
+    }, this);
     }
-    x += this.canvasCtx.measureText('VIROCRATA-19').width + 8;
-    for (var i = 0; i < this.config.CLONE_MAX_HEALTH; i++) {
-    this.canvasCtx.fillStyle = i < this.cloneHealth ? '#ef4444' : '#e2e8f0';
-    this.canvasCtx.fillRect(x + i * (blockSize + gap), y, blockSize, blockSize);
-    this.canvasCtx.strokeStyle = '#991b1b';
-    this.canvasCtx.strokeRect(x + i * (blockSize + gap), y,
-    blockSize, blockSize);
-    }
+    return this.hud;
     },
-    /** Draw the stored power-up beside the stamina bar. */
+    /** Update enemy health or the infinite mode score without crowding the HUD. */
+    drawCloneHealth: function() {
+    var hud = this.getHud();
+    var infinite = this.gameMode === 'infinite';
+    hud['hud-enemy-label'].textContent = this.cloneDefeated ? 'Vírus derrotado' :
+    (infinite ? 'Pontos' : 'Virocrata-19');
+    hud['hud-health-track'].hidden = infinite || this.cloneDefeated;
+    hud['hud-health'].style.width =
+    (100 * this.cloneHealth / this.config.CLONE_MAX_HEALTH) + '%';
+    hud['hud-score'].hidden = !infinite;
+    hud['hud-score'].textContent = this.distanceMeter.getActualDistance(this.distanceRan) +
+    '\nRecorde ' + this.distanceMeter.getActualDistance(this.highestScore);
+    },
+    /** Update the special and slow counters; keep the shield around the player. */
     drawPowerUpIndicator: function() {
-    this.canvasCtx.save();
-    this.canvasCtx.font = 'bold 10px monospace';
-    this.canvasCtx.textBaseline = 'top';
-    this.canvasCtx.fillStyle = '#0369a1';
-    var shieldLabel = this.hasVirusShield ? 'ESCUDO ATIVO' :
-    'AZUIS: ' + this.blueVaccinesCollected + '/' +
-    this.config.BLUE_VACCINES_FOR_SHIELD;
-    this.canvasCtx.fillText(shieldLabel, 8, 26);
+    var hud = this.getHud();
+    hud['hud-special'].textContent = this.hasVirusShield ? 'ATIVO' :
+    this.blueVaccinesCollected + '/' + this.config.BLUE_VACCINES_FOR_SHIELD;
+    hud['hud-special'].classList.toggle('is-active', this.hasVirusShield);
+    hud['hud-slow'].textContent = 'x' + this.cloneSlowStacks;
+    hud['hud-held'].hidden = !this.hasPowerUp;
+    hud['hud-held'].textContent = '← ' + (this.storedPowerUpType === 'blue' ? 'Azul' :
+    (this.storedPowerUpType === 'yellow' ? 'Amarela' : 'Verde'));
+    hud['hud-held'].style.color = this.storedPowerUpType === 'blue' ? '#67d8ff' :
+    (this.storedPowerUpType === 'yellow' ? '#fcd875' : '#86efac');
     if (this.hasVirusShield) {
+    this.canvasCtx.save();
     this.canvasCtx.strokeStyle = '#38bdf8';
     this.canvasCtx.lineWidth = 2;
     this.canvasCtx.beginPath();
@@ -845,26 +860,7 @@
     Trex.config.WIDTH / 2 + 5, Trex.config.HEIGHT / 2 + 5,
     0, 0, Math.PI * 2);
     this.canvasCtx.stroke();
-    }
     this.canvasCtx.restore();
-    if (this.hasPowerUp) {
-    this.drawPowerUpVaccine(148, 7, this.config.POWER_UP_SIZE,
-    this.storedPowerUpType);
-    }
-    if (this.cloneSlowStacks > 0) {
-    var slowLabel = 'x' + this.cloneSlowStacks;
-    this.canvasCtx.font = 'bold 10px monospace';
-    var slowX = this.gameMode === 'infinite' ?
-    180 + this.canvasCtx.measureText('VIROCRATA-19 INFINITO').width + 10 :
-    180 + this.canvasCtx.measureText('VIROCRATA-19').width + 8 +
-    this.config.CLONE_MAX_HEALTH * 12 + 8;
-    var slowY = 8;
-    this.drawPowerUpVaccine(slowX, slowY, 9, 'blue');
-    this.canvasCtx.fillStyle = '#38bdf8';
-    this.canvasCtx.font = 'bold 11px monospace';
-    this.canvasCtx.textBaseline = 'top';
-    this.canvasCtx.fillText(slowLabel,
-    slowX + 18, slowY - 1);
     }
     },
     /** Throw the stored cube backwards toward the clone. */
@@ -878,8 +874,9 @@
     y: this.tRex.yPos + Math.floor(Trex.config.HEIGHT / 2),
     type: this.storedPowerUpType
     };
+    this.tRex.throwAnimationTime = 0;
     this.storedPowerUpType = null;
-    this.playSound(this.soundFx.BUTTON_PRESS);
+    this.playSound(this.soundFx.THROW, 0.012, 0.08, 1);
     },
     /** Update the sprint energy and its temporary speed bonus. */
     updateStamina: function(deltaTime) {
@@ -905,26 +902,13 @@
     }
     }
     },
-    /** Draw sprint energy as ten individual cubes. */
+    /** Draw a compact continuous stamina bar in the shared HUD. */
     drawStaminaBar: function() {
-    var cubes = 10;
-    var size = 10;
-    var gap = 2;
-    var x = 18;
-    var y = 9;
-    var filledCubes = Math.ceil(cubes * Math.max(0,
-    Math.min(1, this.stamina / this.config.STAMINA_MAX)));
-    this.canvasCtx.save();
-    for (var i = 0; i < cubes; i++) {
-    var cubeX = x + i * (size + gap);
-    this.canvasCtx.fillStyle = i < filledCubes ?
-    (this.stamina > 30 ? '#22d3ee' : '#fbbf24') : '#dbe4ea';
-    this.canvasCtx.fillRect(cubeX, y, size, size);
-    this.canvasCtx.strokeStyle = '#64748b';
-    this.canvasCtx.lineWidth = 1;
-    this.canvasCtx.strokeRect(cubeX + 0.5, y + 0.5, size - 1, size - 1);
-    }
-    this.canvasCtx.restore();
+    var hud = this.getHud();
+    hud['game-hud'].hidden = isStartMenuOpen() || this.crashed;
+    hud['hud-stamina'].style.width =
+    (100 * Math.max(0, Math.min(1, this.stamina / this.config.STAMINA_MAX))) + '%';
+    hud['hud-stamina'].style.backgroundColor = this.stamina > 30 ? '#35d4b2' : '#f7c65b';
     },
     /**
     * Event handler.
@@ -1116,10 +1100,13 @@
     this.paused = true;
     cancelAnimationFrame(this.raqId);
     this.raqId = 0;
+    this.drawPending = false;
     },
     play: function() {
     if (isStartMenuOpen()) return;
+    if (this.activated && !this.paused && this.isRunning()) return;
     if (!this.crashed) {
+    cancelAnimationFrame(this.raqId);
     this.activated = true;
     this.paused = false;
     this.tRex.update(0, Trex.status.RUNNING);
@@ -1158,6 +1145,7 @@
     this.nextPowerUpDistance = getRandomNum(60, 100);
     this.testShieldPending = true;
     this.activated = true;
+    this.paused = false;
     this.crashed = false;
     this.distanceRan = 0;
     this.setSpeed(this.config.SPEED);
@@ -1167,6 +1155,7 @@
     this.distanceMeter.reset(this.highestScore);
     this.horizon.reset();
     this.tRex.shieldAnimationTime = null;
+    this.tRex.throwAnimationTime = null;
     this.tRex.reset();
     this.playSound(this.soundFx.BUTTON_PRESS);
     this.update();
@@ -1186,12 +1175,45 @@
     * Play a sound.
     * @param {SoundBuffer} soundBuffer
     */
-    playSound: function(soundBuffer) {
-    if (soundBuffer) {
+    updateFootsteps: function(deltaTime) {
+    if (!this.config.FOOTSTEP_SOUNDS || !this.started || this.crashed ||
+    this.paused || this.tRex.jumping) {
+    this.footstepTime = 0;
+    return;
+    }
+    this.footstepTime += deltaTime;
+    var interval = this.speedBoostActive ? 160 : 260;
+    if (this.footstepTime >= interval) {
+    this.footstepTime %= interval;
+    this.footstepSide = !this.footstepSide;
+    this.playSound(this.footstepSide ? this.soundFx.STEP_ONE :
+    this.soundFx.STEP_TWO, 0.015);
+    }
+    },
+    playSound: function(soundBuffer, volume, duration, rate) {
+    if (!this.config.SOUND_ENABLED) return;
+    if (soundBuffer && this.audioContext) {
+    if (this.audioContext.state === 'suspended') {
+    this.audioContext.resume().catch(function() {});
+    }
     var sourceNode = this.audioContext.createBufferSource();
     sourceNode.buffer = soundBuffer;
-    sourceNode.connect(this.audioContext.destination);
+    if (rate) sourceNode.playbackRate.value = rate;
+    var gain = this.audioContext.createGain();
+    gain.gain.value = volume === undefined ?
+    (soundBuffer === this.soundFx.BUTTON_PRESS ? 0.02 : 0.05) : volume;
+    if (duration) {
+    var now = this.audioContext.currentTime;
+    var peak = gain.gain.value;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(peak, now + 0.01);
+    gain.gain.linearRampToValueAtTime(0, now + duration);
+    }
+    sourceNode.connect(gain);
+    gain.connect(this.audioContext.destination);
     sourceNode.start(0);
+    // Web Audio requires start() before scheduling stop().
+    if (duration) sourceNode.stop(now + duration);
     }
     }
     };
@@ -1367,14 +1389,15 @@
     //******************************************************************************
     /**
     * Check for a collision.
-    * @param {!Obstacle} obstacle
+    * @param {Obstacle|undefined} obstacle
     * @param {!Trex} tRex T-rex object.
     * @param {HTMLCanvasContext} opt_canvasCtx Optional canvas context for drawing
     * collision boxes.
     * @return {Array.<CollisionBox>}
     */
     function checkForCollision(obstacle, tRex, opt_canvasCtx) {
-    var obstacleBoxXPos = Runner.defaultDimensions.WIDTH + obstacle.xPos;
+    // Reserving space for a vaccine can leave the horizon without obstacles.
+    if (!obstacle) return false;
     // Adjustments are made to the bounding box as there is a 1 pixel white
     // border around the t-rex and obstacles.
     var tRexBox = new CollisionBox(
@@ -1546,6 +1569,17 @@
     * Draw and crop based on size.
     */
     draw: function() {
+    // Both display densities use the same object sheet; repeat each object in groups.
+    var sprite = this.typeConfig.sprite;
+    if (sprite) {
+    for (var i = 0; i < this.size; i++) {
+    this.canvasCtx.drawImage(this.image,
+    sprite.x, sprite.y, sprite.width, sprite.height,
+    this.xPos + i * this.typeConfig.width, this.yPos,
+    this.typeConfig.width, this.typeConfig.height);
+    }
+    return;
+    }
     var sourceWidth = this.typeConfig.width;
     var sourceHeight = this.typeConfig.height;
     if (IS_HIDPI) {
@@ -1624,6 +1658,7 @@
     Obstacle.types = [
     {
     type: 'CACTUS_SMALL',
+    sprite: { x: 26, y: 123, width: 23, height: 46 },
     className: ' cactus cactus-small ',
     width: 17,
     height: 35,
@@ -1631,13 +1666,14 @@
     multipleSpeed: 3,
     minGap: 160,
     collisionBoxes: [
-    new CollisionBox(0, 7, 5, 27),
-    new CollisionBox(4, 0, 6, 34),
-    new CollisionBox(10, 4, 7, 14)
+    new CollisionBox(1, 2, 4, 32),
+    new CollisionBox(5, 1, 7, 33),
+    new CollisionBox(12, 2, 4, 32)
     ]
     },
     {
     type: 'CACTUS_LARGE',
+    sprite: { x: 18, y: 24, width: 23, height: 47 },
     className: ' cactus cactus-large ',
     width: 25,
     height: 50,
@@ -1645,9 +1681,9 @@
     multipleSpeed: 6,
     minGap: 160,
     collisionBoxes: [
-    new CollisionBox(0, 12, 7, 38),
-    new CollisionBox(8, 0, 7, 49),
-    new CollisionBox(13, 10, 10, 38)
+    new CollisionBox(1, 2, 6, 47),
+    new CollisionBox(7, 1, 11, 48),
+    new CollisionBox(18, 2, 6, 47)
     ]
     }
     ];
@@ -1659,6 +1695,7 @@
     * @constructor
     */
     function Trex(canvas, image) {
+    this.throwAnimationTime = null;
     this.shieldAnimationTime = null;
     this.canvas = canvas;
     this.canvasCtx = canvas.getContext('2d');
@@ -1692,6 +1729,7 @@
     DROP_VELOCITY: -5,
     GRAVITY: 0.6,
     HEIGHT: 47,
+    THROW_FRAME_DURATION: 200,
     INIITAL_JUMP_VELOCITY: -10,
     INTRO_DURATION: 1500,
     MAX_JUMP_HEIGHT: 30,
@@ -1818,6 +1856,12 @@
     this.draw(this.currentAnimFrames[this.currentFrame], 0);
     }
     // Update the frame position.
+    if (this.throwAnimationTime !== null) {
+    this.throwAnimationTime += deltaTime;
+    if (this.throwAnimationTime >= 3 * this.config.THROW_FRAME_DURATION) {
+    this.throwAnimationTime = null;
+    }
+    }
     if (this.shieldAnimationTime !== null) {
     this.shieldAnimationTime += deltaTime;
     if (this.shieldAnimationTime >= 9 * 140) {
@@ -1839,9 +1883,23 @@
     this.canvasCtx.save();
     this.canvasCtx.imageSmoothingEnabled = false;
     var characterImage = this.image;
-    if (this.shieldAnimationTime !== null && this.status !== Trex.status.CRASHED) {
-    characterImage = Runner.instance_.images.SHIELD_ACTIVATION;
+    var shieldImage = Runner.instance_.images.SHIELD_ACTIVATION;
+    // Keep the normal sprite if the shield animation is unavailable.
+    // Drawing a broken image throws and stops the animation loop.
+    if (this.shieldAnimationTime !== null && this.status !== Trex.status.CRASHED &&
+    shieldImage && shieldImage.complete && shieldImage.naturalWidth >= 9 * 47 &&
+    shieldImage.naturalHeight >= 47) {
+    characterImage = shieldImage;
     x = Math.min(8, Math.floor(this.shieldAnimationTime / 140)) * 47;
+    y = 0;
+    }
+    var throwImage = Runner.instance_.images.THROW;
+    if (this.throwAnimationTime !== null && this.status !== Trex.status.CRASHED &&
+    throwImage && throwImage.complete && throwImage.naturalWidth >= 3 * 47 &&
+    throwImage.naturalHeight >= 47) {
+    characterImage = throwImage;
+    x = Math.min(2, Math.floor(this.throwAnimationTime /
+    this.config.THROW_FRAME_DURATION)) * 47;
     y = 0;
     }
     this.canvasCtx.drawImage(characterImage, x, y, 47, 47,
@@ -1919,7 +1977,7 @@
     this.reset();
     this.jumpCount++;
     }
-    this.update(deltaTime);
+    // Runner.update advances the sprite once, after drawing the background.
     },
     /**
     * Set the speed drop. Immediately cancels the current jump.
@@ -2027,36 +2085,8 @@
     * @param {number} value Digit value 0-9.
     * @param {boolean} opt_highScore Whether drawing the high score.
     */
-    draw: function(digitPos, value, opt_highScore) {
-    if (Runner.instance_.gameMode !== 'infinite') return;
-    var sourceWidth = DistanceMeter.dimensions.WIDTH;
-    var sourceHeight = DistanceMeter.dimensions.HEIGHT;
-    var sourceX = DistanceMeter.dimensions.WIDTH * value;
-    var targetX = digitPos * DistanceMeter.dimensions.DEST_WIDTH;
-    var targetY = this.y;
-    var targetWidth = DistanceMeter.dimensions.WIDTH;
-    var targetHeight = DistanceMeter.dimensions.HEIGHT;
-    // For high DPI we 2x source values.
-    if (IS_HIDPI) {
-    sourceWidth *= 2;
-    sourceHeight *= 2;
-    sourceX *= 2;
-    }
-    this.canvasCtx.save();
-    if (opt_highScore) {
-    // Left of the current score.
-    var highScoreX = this.x - (this.config.MAX_DISTANCE_UNITS * 2) *
-    DistanceMeter.dimensions.WIDTH;
-    this.canvasCtx.translate(highScoreX, this.y);
-    } else {
-    this.canvasCtx.translate(this.x, this.y);
-    }
-    this.canvasCtx.drawImage(this.image, sourceX, 0,
-    sourceWidth, sourceHeight,
-    targetX, targetY,
-    targetWidth, targetHeight
-    );
-    this.canvasCtx.restore();
+    draw: function() {
+    // Score and record are rendered by Runner.drawCloneHealth in the HUD.
     },
     /**
     * Covert pixel distance to a 'real' distance.
@@ -2642,6 +2672,7 @@ function fitGameToWindow() {
 
   game.style.width = (window.innerWidth / scale) + 'px';
   game.style.top = top + 'px';
+  document.getElementById('game-hud').style.top = (top + 6) + 'px';
   game.style.transform = 'scale(' + scale + ')';
 
   if (Runner.instance_) {
@@ -2726,6 +2757,7 @@ window.addEventListener('blur', resetMobileControls);
 window.addEventListener('resize', resetMobileControls);
 
 function showGameOverScreen(won, score) {
+  document.getElementById('game-hud').hidden = true;
   mobileControls.hidden = true;
   gameOverScreen.classList.toggle('is-victory', won);
   document.getElementById('result-label').textContent = won ? 'VITÓRIA' : 'DERROTA';
@@ -2747,13 +2779,16 @@ function hideGameOverScreen() {
 }
 
 function startFromMenu(mode) {
+  runner.stop();
   runner.gameMode = mode;
   startScreen.classList.add('is-hidden');
   mobileControls.hidden = false;
-  if (!runner.activated) {
+  if (!runner.audioContext) {
     runner.loadSounds();
-    runner.activated = true;
   }
+  runner.activated = true;
+  runner.paused = false;
+  runner.time = 0;
   if (!runner.tRex.jumping) {
     runner.playSound(runner.soundFx.BUTTON_PRESS);
     runner.tRex.startJump();
@@ -2814,5 +2849,6 @@ menuButton.addEventListener('click', function(e) {
   runner.stop();
   hideGameOverScreen();
   startScreen.classList.remove('is-hidden');
+  document.getElementById('game-hud').hidden = true;
   mobileControls.hidden = true;
 });
