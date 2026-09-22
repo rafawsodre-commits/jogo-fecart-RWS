@@ -2799,6 +2799,8 @@ function startFromMenu(mode) {
 }
 
 function isStartMenuOpen() {
+  // INTRODUÇÃO DO MODO NORMAL: mantém a partida parada durante a narrativa.
+  if (window.normalIntro && window.normalIntro.active) return true;
   var menu = document.getElementById('start-screen');
   return menu && !menu.classList.contains('is-hidden');
 }
@@ -2831,6 +2833,11 @@ for (var modeButtonIndex = 0; modeButtonIndex < modeButtons.length;
     if (this.getAttribute('data-game-mode') === 'dev') {
       devDialog.showModal();
       devPassword.focus();
+      return;
+    }
+    // INTRODUÇÃO DO MODO NORMAL: reutiliza startFromMenu após a história.
+    if (this.getAttribute('data-game-mode') === 'normal') {
+      window.normalIntro.open();
       return;
     }
     startFromMenu(this.getAttribute('data-game-mode'));

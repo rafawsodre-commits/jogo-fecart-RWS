@@ -6,6 +6,7 @@
   <meta name="description" content="Hospitaxa: corra pelo hospital, desvie dos obstáculos e enfrente o Virocrata-19.">
   <title>Hospitaxa</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=VT323&display=swap">
 </head>
 <body>
   <div id="game-hud" class="game-hud" hidden aria-label="Estado da partida">
@@ -42,6 +43,45 @@
         <button class="art-mode-button" type="button" data-game-mode="dev">MODO DEV</button>
       </div>
     </section>
+    <!-- INTRODUÇÃO DO MODO NORMAL -->
+    <div id="intro-fade" aria-hidden="true"></div>
+    <dialog id="normal-intro" aria-labelledby="intro-title">
+      <div class="intro-panel">
+        <p class="intro-label">HOSPITAXA / RELATO DE UM PACIENTE</p>
+        <h1 id="intro-title" tabindex="-1">VIROCRATA-19</h1>
+        <div id="intro-story" tabindex="0" aria-label="História — clique ou pressione Enter para acelerar">
+          <p hidden>19 MESES APÓS O PRIMEIRO CASO.</p>
+          <p hidden>Meu nome não importa muito.</p>
+          <p hidden>Eu era apenas mais um paciente quando os primeiros casos começaram a aparecer.</p>
+          <p hidden>Pessoas chegavam aos hospitais todos os dias, e o governo ainda dizia que a situação podia ser controlada.</p>
+          <p hidden>Eu já não confiava muito no presidente.</p>
+          <p hidden>Sempre que aparecia em algum podcast ou dava uma entrevista, ele prometia soluções incríveis.</p>
+          <p hidden>O problema é que eu só ouvia essas promessas.</p>
+          <p hidden>Nunca via nada daquilo registrado oficialmente.</p>
+          <p hidden>"Se é tão simples assim, por que nada muda?"</p>
+          <p hidden>O governador Luiz Operário da Silva, por outro lado, parecia diferente.</p>
+          <p hidden>Ele aparecia sorrindo, conversava com pacientes e dizia que estava acompanhando tudo de perto.</p>
+          <p hidden>Parecia um cara legal.</p>
+          <p hidden>Mas dentro do hospital começaram a surgir problemas.</p>
+          <p hidden>Recursos demoravam a chegar.</p>
+          <p hidden>Contratos começaram a levantar dúvidas.</p>
+          <p hidden>E alguns médicos deram ao governador um apelido:</p>
+          <p hidden>VIROCRATA-19.</p>
+          <p hidden>No começo, achei que fosse só uma piada.</p>
+          <p hidden>Até o hospital começar a ser evacuado.</p>
+          <p hidden>Quando acordei, quase todo mundo já tinha ido embora.</p>
+          <p hidden>As vacinas ainda estavam espalhadas pelos corredores.</p>
+          <p hidden>E o Virocrata-19 estava perto demais.</p>
+          <p hidden>Se eu quiser sair daqui, vou ter que atravessar esse hospital antes que ele me alcance.</p>
+        </div>
+        <p id="intro-hint">Clique no texto ou pressione ENTER/ESPAÇO para acelerar. ESC revela toda a história.</p>
+        <p id="intro-status" class="intro-sr-only" role="status"></p>
+        <div class="intro-actions">
+          <button id="intro-skip" type="button">PULAR INTRODUÇÃO</button>
+          <button id="intro-start" type="button" hidden>[ INICIAR PARTIDA ]</button>
+        </div>
+      </div>
+    </dialog>
     <dialog id="dev-dialog" aria-labelledby="dev-title">
       <form id="dev-form">
         <h2 id="dev-title">Modo Dev</h2>
@@ -122,5 +162,6 @@
     </div>
   </div>
   <script src="game.js"></script>
+  <script src="intro.js"></script>
 </body>
 </html>

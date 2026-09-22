@@ -171,34 +171,63 @@ function loadGame(width = 1500) {
   let nextId = 0;
   const frames = new Map();
   const elements = new Map();
+  const timers = new Map();
+  const storyHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8').split('id="intro-story"')[1].split('</div>')[0];
+  const paragraphs = [...storyHtml.matchAll(/<p hidden>(.*?)<\/p>/g)].map(match => ({ hidden: true, textContent: match[1] }));
   const ctx = new Proxy({ measureText: () => ({ width: 90 }) }, {
     get: (target, key) => key in target ? target[key] : () => {}
   });
   function element(id) {
     const classes = new Set();
+    const listeners = new Map();
     return {
+      hidden: id === 'intro-start', open: false, tagName: 'DIV',
+      scrollTop: 0, scrollHeight: 600, clientHeight: 600,
+      getAttribute(name) { return name === 'data-game-mode' ? this.dataset.gameMode : null; },
+      dispatch(type, event = {}) {
+        event = { target: this, stopPropagation() {}, preventDefault() {}, ...event };
+        (listeners.get(type) || []).forEach(fn => fn.call(this, event));
+      },
+      showModal() { this.open = true; }, close() { this.open = false; },
       id, style: {}, dataset: {}, width: 600, height: 150,
       get offsetWidth() { return parseFloat(this.style.width) || 600; },
       complete: true, naturalWidth: 1000, naturalHeight: 1000,
       classList: { add: x => classes.add(x), remove: x => classes.delete(x),
         contains: x => classes.has(x), toggle() {} },
-      getContext: () => ctx, appendChild() {}, addEventListener() {}, focus() {},
-      querySelector: () => null, querySelectorAll: () => []
+      getContext: () => ctx, appendChild() {},
+      addEventListener(type, fn) {
+        if (!listeners.has(type)) listeners.set(type, []);
+        listeners.get(type).push(fn);
+      },
+      focus() { sandbox.document.activeElement = this; },
+      blur() { sandbox.document.activeElement = null; },
+      querySelector: () => null,
+      querySelectorAll: () => id === 'intro-story' ? paragraphs : []
     };
   }
+  const buttons = ['normal', 'infinite', 'dev'].map(mode => {
+    const button = element(mode);
+    button.dataset.gameMode = mode;
+    button.tagName = 'BUTTON';
+    return button;
+  });
+  const motion = { matches: false, addEventListener() {} };
   const sandbox = {
     navigator: { userAgent: '' }, devicePixelRatio: 1, innerWidth: width,
     innerHeight: 375, performance: { now: () => now },
     document: {
+      body: { appendChild() {} }, activeElement: null,
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, element(id));
         return elements.get(id);
       },
       querySelector() { return this.getElementById('main-frame-error'); },
-      querySelectorAll: () => [], createElement: element, addEventListener() {}
+      querySelectorAll: selector => selector === '[data-game-mode]' ? buttons : [], createElement: element, addEventListener() {}
     },
     getComputedStyle: () => ({ paddingLeft: '0px' }),
-    matchMedia: () => ({ matches: false }), addEventListener() {},
+    matchMedia: query => query === '(prefers-reduced-motion: reduce)' ? motion : ({ matches: false }), addEventListener() {},
+    setTimeout(fn, delay) { const id = ++nextId; timers.set(id, { fn, at: now + delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
     clearInterval() {},
     requestAnimationFrame(fn) { frames.set(++nextId, fn); return nextId; },
     cancelAnimationFrame(id) { frames.delete(id); }
@@ -206,14 +235,91 @@ function loadGame(width = 1500) {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../game.js'), 'utf8'), sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../intro.js'), 'utf8'), sandbox);
   sandbox.runner.loadSounds = () => {};
-  return { ...sandbox, frames, advance(ms = 1000 / 60) {
+  return { ...sandbox, frames, buttons, paragraphs, motion,
+    advanceTimers(ms) {
+      const end = now + ms;
+      while (true) {
+        const next = [...timers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!next) break;
+        now = next[1].at;
+        timers.delete(next[0]);
+        next[1].fn();
+      }
+      now = end;
+    }, advance(ms = 1000 / 60) {
     now += ms;
     const callbacks = [...frames.values()];
     frames.clear();
     callbacks.forEach(fn => fn());
   } };
 }
+
+test('Normal menu shows the story before reusing the original game start', () => {
+  const game = loadGame();
+  const intro = game.document.getElementById('normal-intro');
+  const start = game.document.getElementById('intro-start');
+  assert.equal(intro.open, false);
+  assert.equal(game.normalIntro.active, false);
+  game.buttons[0].dispatch('click');
+  assert.equal(game.normalIntro.active, true);
+  assert.equal(game.runner.activated, false);
+  game.advanceTimers(360);
+  assert.equal(intro.open, true);
+  assert.equal(start.hidden, true);
+  const firstBlock = game.paragraphs.filter(p => !p.hidden).length;
+  assert.ok(firstBlock > 0 && firstBlock < game.paragraphs.length);
+  game.runner.onVisibilityChange({ type: 'focus' });
+  assert.equal(game.frames.size, 0);
+  game.document.getElementById('intro-story').dispatch('click');
+  assert.ok(game.paragraphs.filter(p => !p.hidden).length > firstBlock);
+  game.document.getElementById('intro-skip').dispatch('click');
+  assert.equal(game.paragraphs.every(p => !p.hidden), true);
+  assert.equal(start.hidden, false);
+  assert.equal(game.runner.activated, false);
+  start.dispatch('click');
+  start.dispatch('click');
+  game.advanceTimers(360);
+  assert.equal(intro.open, false);
+  assert.equal(game.normalIntro.active, false);
+  assert.equal(game.runner.gameMode, 'normal');
+  assert.equal(game.runner.activated, true);
+  assert.equal(game.frames.size, 1);
+});
+
+test('Infinite and Dev menu paths bypass the story, retaining the Dev password', () => {
+  const infinite = loadGame();
+  infinite.buttons[1].dispatch('click');
+  assert.equal(infinite.runner.gameMode, 'infinite');
+  assert.equal(infinite.runner.activated, true);
+  assert.equal(infinite.normalIntro.active, false);
+  const dev = loadGame();
+  dev.buttons[2].dispatch('click');
+  assert.equal(dev.document.getElementById('dev-dialog').open, true);
+  assert.equal(dev.runner.activated, false);
+  // Read the existing credential without introducing a second value to maintain.
+  const source = fs.readFileSync(path.join(__dirname, '../game.js'), 'utf8');
+  dev.document.getElementById('dev-password').value = source.match(/devPassword.value !== '([^']+)'/)[1];
+  dev.document.getElementById('dev-form').dispatch('submit');
+  assert.equal(dev.runner.gameMode, 'dev');
+  assert.equal(dev.runner.activated, true);
+  assert.equal(dev.normalIntro.active, false);
+});
+
+test('story completes automatically, Escape skips text and reduced motion reveals it immediately', () => {
+  for (const mode of ['automatic', 'escape', 'reduced']) {
+    const game = loadGame();
+    game.motion.matches = mode === 'reduced';
+    game.buttons[0].dispatch('click');
+    game.advanceTimers(mode === 'reduced' ? 0 : 360);
+    if (mode === 'escape') game.document.getElementById('normal-intro').dispatch('keydown', { key: 'Escape' });
+    if (mode === 'automatic') game.advanceTimers(180000);
+    assert.equal(game.paragraphs.every(p => !p.hidden), true);
+    assert.equal(game.document.getElementById('intro-start').hidden, false);
+    assert.equal(game.runner.activated, false);
+  }
+});
 
 test('Dev collects its starter blue syringe and keeps one animation loop after focus', () => {
   const game = loadGame();
