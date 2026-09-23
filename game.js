@@ -1,4 +1,4 @@
-﻿function hideClass(name) {
+function hideClass(name) {
        var myClasses = document.querySelectorAll(name),
       i = 0,
       l = myClasses.length;
@@ -112,38 +112,38 @@
     Runner.config = {
     SOUND_ENABLED: false,
     FOOTSTEP_SOUNDS: false,
-    ACCELERATION: 0.003,
+    ACCELERATION: 0.0027,
     BG_CLOUD_SPEED: 0.2,
     BOTTOM_PAD: 10,
     CLEAR_TIME: 3000,
     CLOUD_FREQUENCY: 0.5,
-    DISTANCE_SPEED_CAP: 15,
-    DISTANCE_SPEED_STEP: 0.5,
+    DISTANCE_SPEED_CAP: 13.5,
+    DISTANCE_SPEED_STEP: 0.45,
     GAMEOVER_CLEAR_TIME: 750,
-    GAP_COEFFICIENT: 1.8,
+    GAP_COEFFICIENT: 0.85,
     GRAVITY: 0.6,
     INITIAL_JUMP_VELOCITY: 12,
     MAX_CLOUDS: 6,
     MAX_OBSTACLE_LENGTH: 3,
-    MAX_SPEED: 12,
+    MAX_SPEED: 10.8,
     MIN_JUMP_HEIGHT: 35,
     MOBILE_SPEED_COEFFICIENT: 1.2,
     RESOURCE_TEMPLATE_ID: 'audio-resources',
-    SPEED: 4.5,
-    SPEED_BOOST: 5,
+    SPEED: 4.05,
+    SPEED_BOOST: 4.5,
     SPEED_DROP_COEFFICIENT: 3,
-    SPRINT_MAX_SPEED: 17,
+    SPRINT_MAX_SPEED: 15.3,
     SPRINT_RECOVERY: 6,
     STAMINA_DRAIN: 50,
     STAMINA_MAX: 100,
     STAMINA_REGEN: 14,
     CLONE_BASE_SPEED: 0.012,
-    CLONE_DISTANCE_SPEED_RATE: 0.00018,
-    CLONE_DISTANCE_SPEED_CAP: 0.075,
+    CLONE_DISTANCE_SPEED_RATE: 0.00014,
+    CLONE_DISTANCE_SPEED_CAP: 0.05,
     CLONE_PRESSURE_PER_HIT: 25,
     CLONE_PRESSURE_RECOVERY: 0.2,
-    CLONE_SPEED_PER_LOST_POINT: 0.0006,
-    CLONE_MAX_PENALTY_SPEED: 0.05,
+    CLONE_SPEED_PER_LOST_POINT: 0.0003,
+    CLONE_MAX_PENALTY_SPEED: 0.025,
     POWER_UP_MIN_GAP: 90,
     POWER_UP_MAX_GAP: 170,
     POWER_UP_SIZE: 14,
@@ -190,8 +190,9 @@
     {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
     {name: 'GROUND', id: 'corridor-scenery'},
-    {name: 'CACTUS_LARGE', id: '1x-obstacle-large'},
-    {name: 'CACTUS_SMALL', id: '1x-obstacle-small'},
+    {name: 'WHEELCHAIR', id: 'obstacle-wheelchair'},
+    {name: 'VIRUS', id: 'obstacle-virus'},
+{name: 'IV_STAND', id: 'obstacle-iv'},
     {name: 'CLOUD', id: '1x-cloud'},
     {name: 'HORIZON', id: '1x-horizon'},
     {name: 'RESTART', id: '1x-restart'},
@@ -204,8 +205,9 @@
     {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
     {name: 'GROUND', id: 'corridor-scenery'},
-    {name: 'CACTUS_LARGE', id: '2x-obstacle-large'},
-    {name: 'CACTUS_SMALL', id: '2x-obstacle-small'},
+    {name: 'WHEELCHAIR', id: 'obstacle-wheelchair'},
+    {name: 'VIRUS', id: 'obstacle-virus'},
+{name: 'IV_STAND', id: 'obstacle-iv'},
     {name: 'CLOUD', id: '2x-cloud'},
     {name: 'HORIZON', id: '2x-horizon'},
     {name: 'RESTART', id: '2x-restart'},
@@ -662,8 +664,7 @@
     return;
     }
     if (this.cloneStunRemaining > 0) {
-    var frozenWorldMovement = Math.floor((this.currentSpeed * FPS / 1000) *
-    deltaTime);
+    var frozenWorldMovement = (this.currentSpeed * FPS / 1000) * deltaTime;
     this.cloneFrozenX -= frozenWorldMovement;
     this.companionDrawX = this.cloneFrozenX;
     this.cloneStunRemaining = Math.max(0,
@@ -1232,24 +1233,19 @@
     */
     Runner.updateCanvasScaling = function(canvas, opt_width, opt_height) {
     var context = canvas.getContext('2d');
-    // Query the various pixel ratios
-    var devicePixelRatio = Math.floor(window.devicePixelRatio) || 1;
-    var backingStoreRatio = Math.floor(context.webkitBackingStorePixelRatio) || 1;
-    var ratio = devicePixelRatio / backingStoreRatio;
-    // Upscale the canvas if the two ratios don't match
-    if (devicePixelRatio !== backingStoreRatio) {
+    // Match both screen density and the CSS enlargement of the game.
+    var devicePixelRatio = window.devicePixelRatio || 1;
+    var ratio = Math.max(1, devicePixelRatio * (Runner.displayScale || 1));
     var oldWidth = opt_width || canvas.width;
     var oldHeight = opt_height || canvas.height;
-    canvas.width = oldWidth * ratio;
-    canvas.height = oldHeight * ratio;
+    canvas.width = Math.ceil(oldWidth * ratio);
+    canvas.height = Math.ceil(oldHeight * ratio);
     canvas.style.width = oldWidth + 'px';
     canvas.style.height = oldHeight + 'px';
     // Scale the context to counter the fact that we've manually scaled
     // our canvas element.
-    context.scale(ratio, ratio);
-    return true;
-    }
-    return false;
+    context.scale(canvas.width / oldWidth, canvas.height / oldHeight);
+    return ratio !== 1;
     };
     /**
     * Get random number.
@@ -1516,7 +1512,7 @@
     this.image = obstacleImg;
     this.typeConfig = type;
     this.gapCoefficient = gapCoefficient;
-    this.size = getRandomNum(1, Obstacle.MAX_OBSTACLE_LENGTH);
+    this.size = getRandomNum(1, type.maxLength || Obstacle.MAX_OBSTACLE_LENGTH);
     this.dimensions = dimensions;
     this.remove = false;
     this.xPos = 0;
@@ -1569,15 +1565,20 @@
     * Draw and crop based on size.
     */
     draw: function() {
-    // Both display densities use the same object sheet; repeat each object in groups.
+    // Smooth downscaled details without adding a blurred outline.
     var sprite = this.typeConfig.sprite;
     if (sprite) {
+    this.canvasCtx.save();
+    this.canvasCtx.imageSmoothingEnabled = true;
+    this.canvasCtx.imageSmoothingQuality = 'high';
+    this.canvasCtx.filter = 'none';
     for (var i = 0; i < this.size; i++) {
     this.canvasCtx.drawImage(this.image,
     sprite.x, sprite.y, sprite.width, sprite.height,
     this.xPos + i * this.typeConfig.width, this.yPos,
     this.typeConfig.width, this.typeConfig.height);
     }
+    this.canvasCtx.restore();
     return;
     }
     var sourceWidth = this.typeConfig.width;
@@ -1601,7 +1602,7 @@
     */
     update: function(deltaTime, speed) {
     if (!this.remove) {
-    this.xPos -= Math.floor((speed * FPS / 1000) * deltaTime);
+    this.xPos -= (speed * FPS / 1000) * deltaTime;
     this.draw();
     if (!this.isVisible()) {
     this.remove = true;
@@ -1616,15 +1617,16 @@
     * @return {number} The gap size.
     */
     getGap: function(gapCoefficient, speed) {
-    var minGap = Math.round(this.width * speed +
-    this.typeConfig.minGap * gapCoefficient);
+    // Keep time to land between jumps, including during a sprint.
+    var minGap = Math.ceil(Math.max(this.width * speed +
+    this.typeConfig.minGap * gapCoefficient, speed * FPS * 0.85));
     var maxGap = Math.round(minGap * Obstacle.MAX_GAP_COEFFICIENT);
-    // Favor regular and generous gaps to allow more time between jumps.
+    // Frequent short intervals, with occasional longer breaks.
     var spacing = Math.random();
-    if (spacing < 0.2) {
+    if (spacing < 0.65) {
     return getRandomNum(minGap, Math.round(minGap * 1.15));
     }
-    if (spacing < 0.75) {
+    if (spacing < 0.9) {
     return getRandomNum(Math.round(minGap * 1.15),
     Math.round(minGap * 1.6));
     }
@@ -1657,33 +1659,47 @@
     */
     Obstacle.types = [
     {
-    type: 'CACTUS_SMALL',
-    sprite: { x: 26, y: 123, width: 23, height: 46 },
-    className: ' cactus cactus-small ',
-    width: 17,
+    type: 'VIRUS',
+    sprite: { x: 9, y: 7, width: 82, height: 86 },
+    width: 33,
     height: 35,
     yPos: 105,
-    multipleSpeed: 3,
+    maxLength: 1,
+    multipleSpeed: Infinity,
     minGap: 160,
     collisionBoxes: [
-    new CollisionBox(1, 2, 4, 32),
-    new CollisionBox(5, 1, 7, 33),
-    new CollisionBox(12, 2, 4, 32)
+    new CollisionBox(7, 5, 19, 25),
+    new CollisionBox(3, 11, 27, 13)
     ]
     },
     {
-    type: 'CACTUS_LARGE',
-    sprite: { x: 18, y: 24, width: 23, height: 47 },
-    className: ' cactus cactus-large ',
-    width: 25,
-    height: 50,
-    yPos: 90,
-    multipleSpeed: 6,
+    type: 'WHEELCHAIR',
+    sprite: { x: 7, y: 5, width: 86, height: 90 },
+    width: 43,
+    height: 45,
+    yPos: 95,
+    maxLength: 1,
+    multipleSpeed: Infinity,
     minGap: 160,
     collisionBoxes: [
-    new CollisionBox(1, 2, 6, 47),
-    new CollisionBox(7, 1, 11, 48),
-    new CollisionBox(18, 2, 6, 47)
+    new CollisionBox(10, 4, 23, 21),
+    new CollisionBox(3, 25, 20, 17),
+    new CollisionBox(29, 16, 9, 27)
+    ]
+    },
+    {
+    type: 'IV_STAND',
+    sprite: { x: 23, y: 4, width: 62, height: 96 },
+    width: 32,
+    height: 50,
+    yPos: 90,
+    maxLength: 1,
+    multipleSpeed: Infinity,
+    minGap: 160,
+    collisionBoxes: [
+    new CollisionBox(4, 2, 16, 4),
+    new CollisionBox(9, 5, 5, 44),
+    new CollisionBox(15, 14, 11, 18)
     ]
     }
     ];
@@ -2463,15 +2479,10 @@
     * @param {number} speed
     */
     update: function(deltaTime, speed) {
-    var increment = Math.floor(speed * (FPS / 1000) * deltaTime);
+    var increment = speed * (FPS / 1000) * deltaTime;
     if (this.image.id === 'corridor-scenery') {
-    if (!this.sceneryMotionPreference && window.matchMedia) {
-    this.sceneryMotionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    }
-    var scenerySpeed = this.sceneryMotionPreference &&
-    this.sceneryMotionPreference.matches ? 0 : 0.15;
-    this.corridorTravel = (this.corridorTravel || 0) +
-    speed * (FPS / 1000) * Math.min(deltaTime, 50) * scenerySpeed;
+    // The corridor and obstacles belong to the same moving world.
+    this.corridorTravel = (this.corridorTravel || 0) + increment;
     this.draw();
     return;
     }
@@ -2520,8 +2531,9 @@
     this.horizonLine = null;
     // Obstacles
     this.obstacleImgs = {
-    CACTUS_SMALL: images.CACTUS_SMALL,
-    CACTUS_LARGE: images.CACTUS_LARGE
+    VIRUS: images.VIRUS,
+    WHEELCHAIR: images.WHEELCHAIR,
+    IV_STAND: images.IV_STAND
     };
     this.init();
     };
@@ -2553,7 +2565,7 @@
     */
     update: function(deltaTime, currentSpeed, updateObstacles) {
     this.obstacleMovement = updateObstacles ?
-    Math.floor(currentSpeed * FPS / 1000 * deltaTime) : 0;
+    currentSpeed * FPS / 1000 * deltaTime : 0;
     this.runningTime += deltaTime;
     this.horizonLine.update(deltaTime, currentSpeed);
     if (updateObstacles) {
@@ -2625,9 +2637,12 @@
     Runner.config.POWER_UP_OBSTACLE_CLEARANCE > this.dimensions.WIDTH) {
     return false;
     }
-    var obstacleTypeIndex =
-    getRandomNum(0, Obstacle.types.length - 1);
-    var obstacleType = Obstacle.types[obstacleTypeIndex];
+    var previousObstacle = this.obstacles[this.obstacles.length - 1];
+    var availableTypes = Obstacle.types.filter(function(type) {
+    return !previousObstacle || type.type !== previousObstacle.typeConfig.type;
+    });
+    var obstacleTypeIndex = getRandomNum(0, availableTypes.length - 1);
+    var obstacleType = availableTypes[obstacleTypeIndex];
     var obstacleImg = this.obstacleImgs[obstacleType.type];
     this.obstacles.push(new Obstacle(this.canvasCtx, obstacleType,
     obstacleImg, this.dimensions, this.gapCoefficient, currentSpeed));
@@ -2674,6 +2689,7 @@ function fitGameToWindow() {
   game.style.top = top + 'px';
   document.getElementById('game-hud').style.top = (top + 6) + 'px';
   game.style.transform = 'scale(' + scale + ')';
+  Runner.displayScale = scale;
 
   if (Runner.instance_) {
     Runner.instance_.adjustDimensions();

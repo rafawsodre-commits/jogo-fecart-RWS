@@ -4,6 +4,53 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+test('corridor and obstacles travel together at normal and sprint speeds', () => {
+  const game = loadGame();
+  game.startFromMenu('infinite');
+  const horizon = game.runner.horizon;
+  horizon.addNewObstacle(4.5);
+  const obstacle = horizon.obstacles[0];
+  obstacle.xPos = 1000;
+  for (const [speed, duration] of [[4.5, 16], [12, 1000 / 144], [17, 75]]) {
+    const previousX = obstacle.xPos;
+    const previousTravel = horizon.horizonLine.corridorTravel || 0;
+    horizon.update(duration, speed, true);
+    const groundTravel = horizon.horizonLine.corridorTravel - previousTravel;
+    assert.ok(Math.abs(groundTravel - (previousX - obstacle.xPos)) < 0.000001);
+    assert.ok(Math.abs(groundTravel - horizon.obstacleMovement) < 0.000001);
+  }
+  horizon.reset();
+  assert.equal(horizon.horizonLine.corridorTravel, 0);
+});
+
+test('canvas resolution includes CSS enlargement and fractional screen density', () => {
+  const game = loadGame();
+  const canvas = game.runner.canvas;
+  for (const [density, enlargement] of [[1, 2.5], [1.25, 2.5], [1, 1]]) {
+    game.window.devicePixelRatio = density;
+    game.Runner.displayScale = enlargement;
+    game.Runner.updateCanvasScaling(canvas, 600, 150);
+    assert.equal(canvas.width, Math.ceil(600 * density * enlargement));
+    assert.equal(canvas.height, Math.ceil(150 * density * enlargement));
+    assert.equal(canvas.style.width, '600px');
+    assert.equal(canvas.style.height, '150px');
+  }
+});
+
+test('obstacle movement preserves distance across refresh rates and frame timing', () => {
+  for (const durations of [Array(60).fill(1000 / 60), Array(144).fill(1000 / 144), Array(50).fill([12, 8]).flat()]) {
+    const game = loadGame();
+    game.startFromMenu('infinite');
+    const horizon = game.runner.horizon;
+    horizon.addNewObstacle(4.5);
+    const obstacle = horizon.obstacles[0];
+    obstacle.xPos = 1000;
+    for (const duration of durations) obstacle.update(duration, 4.5);
+    assert.ok(Math.abs(obstacle.xPos - 730) < 0.000001,
+      `Expected 270 pixels of movement; got ${1000 - obstacle.xPos}`);
+  }
+});
+
 test('HUD stays hidden after defeat or victory and returns on restart', () => {
   for (const won of [false, true]) {
     const game = loadGame();
@@ -324,7 +371,7 @@ test('story completes automatically, Escape skips text and reduced motion reveal
 test('Dev collects its starter blue syringe and keeps one animation loop after focus', () => {
   const game = loadGame();
   game.startFromMenu('dev');
-  for (let i = 0; i < 240; i++) game.advance();
+  for (let i = 0; i < 600 && game.runner.blueVaccinesCollected === 0; i++) game.advance();
   assert.equal(game.runner.hasVirusShield, false);
   assert.equal(game.runner.blueVaccinesCollected, 1);
   assert.equal(game.runner.crashed, false);
@@ -377,7 +424,7 @@ test('shield absorbs capture once and can be earned again', () => {
 test('Dev keeps drawing on a narrow screen when the blue pickup delays obstacles', () => {
   const game = loadGame(780);
   game.startFromMenu('dev');
-  for (let i = 0; i < 240; i++) game.advance();
+  for (let i = 0; i < 600 && game.runner.blueVaccinesCollected === 0; i++) game.advance();
   assert.equal(game.runner.hasVirusShield, false);
   assert.equal(game.runner.blueVaccinesCollected, 1);
   assert.equal(game.runner.crashed, false);
