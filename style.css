@@ -64,7 +64,7 @@
 .hud-fill { display: block; width: 100%; height: 100%; background: #35d4b2; box-shadow: inset 0 2px 0 rgba(255, 255, 255, .3); }
 .hud-health { flex: 1; min-width: 48px; }
 .hud-health .hud-fill { background: #f5828b; }
-.hud-health::after { background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / 6 - 2px), #102332 calc(100% / 6 - 2px), #102332 calc(100% / 6)); }
+.hud-health::after { background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / 3 - 2px), #102332 calc(100% / 3 - 2px), #102332 calc(100% / 3)); }
 .hud-held { font-size: 11px; white-space: nowrap; background: #233f49; padding: 3px 5px; }
 @media (max-width: 650px) {
   .game-hud { width: auto; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); display: grid; grid-template-columns: 1fr 1fr; align-items: start; font-size: 11px; padding: 7px 8px; }
@@ -829,6 +829,46 @@ body {
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+}
+
+.start-art-menu .game-title {
+  position: absolute;
+  top: 3%;
+  left: 3%;
+  display: flex;
+  justify-content: flex-start;
+  gap: .125em;
+  width: 94%;
+  margin: 0;
+  padding: 0;
+  font-size: 8cqw;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.title-letter {
+  display: block;
+  flex: 0 0 var(--letter-width);
+  height: 1.25em;
+  background: url('images/alphabet-0.png') no-repeat;
+  background-size: 6.25em 6.25em;
+  image-rendering: pixelated;
+}
+
+.letter-h { --letter-width: .75em; background-position: -4.625em -1.3125em; }
+.letter-o { --letter-width: .9375em; background-position: -1.75em -3.875em; }
+.letter-s { --letter-width: .75em; background-position: -1.4375em -5em; }
+.letter-p { --letter-width: .625em; background-position: -3.40625em -3.875em; }
+.letter-i { --letter-width: .25em; background-position: -.40625em -2.5em; }
+.letter-t { --letter-width: 1.125em; background-position: -2.65625em -5.125em; }
+.letter-a { --letter-width: 1em; background-position: -.21875em 0; }
+
+/* ABC.gif contains two alphabet pages, not animation frames for each letter.
+ * Use lossless static copies so the title never switches to other characters. */
+.letter-x {
+  --letter-width: 1.125em;
+  background-image: url('images/alphabet-1.png');
+  background-position: -2.75em 0;
 }
 
 .art-mode-button {

@@ -63,7 +63,6 @@ function hideClass(name) {
     this.cloneDefeated = false;
     this.gameMode = 'normal';
     this.nextPowerUpDistance = 80;
-    this.testShieldPending = true;
     this.msPerFrame = 1000 / FPS;
     this.currentSpeed = this.config.SPEED;
     this.obstacles = [];
@@ -117,22 +116,20 @@ function hideClass(name) {
     BOTTOM_PAD: 10,
     CLEAR_TIME: 3000,
     CLOUD_FREQUENCY: 0.5,
-    DISTANCE_SPEED_CAP: 13.5,
-    DISTANCE_SPEED_STEP: 0.45,
     GAMEOVER_CLEAR_TIME: 750,
     GAP_COEFFICIENT: 0.85,
     GRAVITY: 0.6,
     INITIAL_JUMP_VELOCITY: 12,
     MAX_CLOUDS: 6,
     MAX_OBSTACLE_LENGTH: 3,
-    MAX_SPEED: 10.8,
+    MAX_SPEED: 7.5,
     MIN_JUMP_HEIGHT: 35,
     MOBILE_SPEED_COEFFICIENT: 1.2,
     RESOURCE_TEMPLATE_ID: 'audio-resources',
     SPEED: 4.05,
     SPEED_BOOST: 4.5,
     SPEED_DROP_COEFFICIENT: 3,
-    SPRINT_MAX_SPEED: 15.3,
+    SPRINT_MAX_SPEED: 10,
     SPRINT_RECOVERY: 6,
     STAMINA_DRAIN: 50,
     STAMINA_MAX: 100,
@@ -153,12 +150,11 @@ function hideClass(name) {
     POWER_UP_BLUE_CHANCE: 0.3,
     POWER_UP_RED_CHANCE: 0.45,
     // Starter blue syringe, available only in Dev mode.
-    TEST_SHIELD_SYRINGE: true,
     POWER_UP_SLOW_PER_STACK: 0.15,
     BLUE_VACCINES_FOR_SHIELD: 3,
     MAX_CLONE_SLOW_STACKS: 3,
     POWER_UP_BLUE_FLASH_DURATION: 700,
-    CLONE_MAX_HEALTH: 6
+    CLONE_MAX_HEALTH: 3
     };
     /**
     * Default dimensions.
@@ -338,13 +334,9 @@ function hideClass(name) {
     this.currentSpeed = opt_speed;
     }
     },
-    /** Calculate the normal speed cap from the distance travelled. */
+    /** Only Infinite mode can accelerate without a speed cap. */
     getNormalMaxSpeed: function() {
-    var distance = this.distanceMeter ?
-    this.distanceMeter.getActualDistance(this.distanceRan) : 0;
-    return Math.min(this.config.DISTANCE_SPEED_CAP,
-    this.config.MAX_SPEED + Math.floor(distance / 100) *
-    this.config.DISTANCE_SPEED_STEP);
+    return this.gameMode === 'infinite' ? Infinity : this.config.MAX_SPEED;
     },
     /**
     * Game initialiser.
@@ -682,26 +674,14 @@ function hideClass(name) {
     var size = this.config.POWER_UP_SIZE;
     var distance = this.distanceMeter.getActualDistance(this.distanceRan);
     var movement = this.horizon.obstacleMovement || 0;
-    if (this.config.TEST_SHIELD_SYRINGE && this.testShieldPending &&
-    this.gameMode === 'dev' && !this.tRex.jumping &&
-    !this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
-    this.isPowerUpPositionClear(this.tRex.xPos + Trex.config.WIDTH + 24 - movement)) {
-    this.powerUp = {
-    x: this.tRex.xPos + Trex.config.WIDTH + 24,
-    y: this.tRex.groundYPos + Trex.config.HEIGHT - size,
-    type: 'blue'
-    };
-    this.testShieldPending = false;
-    }
     if (!this.powerUp && !this.hasPowerUp && !this.powerUpProjectile &&
     distance >= this.nextPowerUpDistance &&
     this.isPowerUpPositionClear(this.dimensions.WIDTH - movement)) {
-    var isDevShieldTest = this.gameMode === 'dev';
-    var elevated = !isDevShieldTest && Math.random() > 0.5;
+    var elevated = Math.random() > 0.5;
     var powerUpRoll = Math.random();
     var redChance = this.gameMode !== 'infinite' ?
     this.config.POWER_UP_RED_CHANCE : 0;
-    var powerUpType = isDevShieldTest ? 'blue' : powerUpRoll < redChance ?
+    var powerUpType = powerUpRoll < redChance ?
     'red' : (powerUpRoll < redChance +
     this.config.POWER_UP_BLUE_CHANCE ? 'blue' : 'yellow');
     this.powerUp = {
@@ -749,7 +729,8 @@ function hideClass(name) {
     this.powerUpProjectile.y < this.tRex.groundYPos + Trex.config.HEIGHT &&
     this.powerUpProjectile.y + size > this.tRex.groundYPos) {
     if (this.powerUpProjectile.type === 'red') {
-    this.cloneHealth = Math.max(0, this.cloneHealth - 1);
+    this.cloneHealth = this.gameMode === 'dev' && this.powerUpProjectile.instakill ?
+    0 : Math.max(0, this.cloneHealth - 1);
     if (this.cloneHealth === 0) {
     this.cloneDefeated = true;
     this.cloneStunRemaining = 0;
@@ -865,18 +846,20 @@ function hideClass(name) {
     }
     },
     /** Throw the stored cube backwards toward the clone. */
-    throwPowerUp: function() {
-    if (!this.hasPowerUp || this.powerUpProjectile || !this.started) {
+    throwPowerUp: function(opt_instakill) {
+    var devShot = opt_instakill === true && this.gameMode === 'dev';
+    if ((!this.hasPowerUp && !devShot) || this.powerUpProjectile || !this.started) {
     return;
     }
-    this.hasPowerUp = false;
+    if (!devShot) this.hasPowerUp = false;
     this.powerUpProjectile = {
     x: this.tRex.xPos - this.config.POWER_UP_SIZE,
-    y: this.tRex.yPos + Math.floor(Trex.config.HEIGHT / 2),
-    type: this.storedPowerUpType
+    y: (devShot ? this.tRex.groundYPos : this.tRex.yPos) + Math.floor(Trex.config.HEIGHT / 2),
+    type: devShot ? 'red' : this.storedPowerUpType,
+    instakill: devShot
     };
     this.tRex.throwAnimationTime = 0;
-    this.storedPowerUpType = null;
+    if (!devShot) this.storedPowerUpType = null;
     this.playSound(this.soundFx.THROW, 0.012, 0.08, 1);
     },
     /** Update the sprint energy and its temporary speed bonus. */
@@ -887,7 +870,9 @@ function hideClass(name) {
     if (this.speedBoostActive) {
     this.stamina = Math.max(0,
     this.stamina - this.config.STAMINA_DRAIN * seconds);
-    this.currentSpeed = Math.min(this.config.SPRINT_MAX_SPEED,
+    var sprintMaxSpeed = this.gameMode === 'infinite' ? Infinity :
+    this.config.SPRINT_MAX_SPEED;
+    this.currentSpeed = Math.min(sprintMaxSpeed,
     this.currentSpeed + this.config.SPEED_BOOST * seconds);
     if (this.stamina === 0) {
     this.sprintExhausted = true;
@@ -969,6 +954,23 @@ function hideClass(name) {
     */
     onKeyDown: function(e) {
     if (isStartMenuOpen()) return;
+    if (this.gameMode === 'dev' && this.started && !this.crashed && !this.paused) {
+    var devKey = (e.key || '').toLowerCase();
+    var devKill = devKey === 'm' || e.code === 'KeyM' || e.keyCode === 77;
+    var devShield = devKey === 'n' || e.code === 'KeyN' || e.keyCode === 78;
+    if (devKill || devShield) {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (devKill) {
+    this.throwPowerUp(true);
+    } else {
+    this.blueVaccinesCollected = this.config.BLUE_VACCINES_FOR_SHIELD - 1;
+    this.collectBlueVaccine();
+    this.drawPowerUpIndicator();
+    }
+    return;
+    }
+    }
     if (e.target != this.detailsButton) {
     if (!this.crashed && (Runner.keycodes.JUMP[String(e.keyCode)] ||
     e.type == Runner.events.TOUCHSTART)) {
@@ -1144,7 +1146,6 @@ function hideClass(name) {
     this.cloneHealth = this.config.CLONE_MAX_HEALTH;
     this.cloneDefeated = false;
     this.nextPowerUpDistance = getRandomNum(60, 100);
-    this.testShieldPending = true;
     this.activated = true;
     this.paused = false;
     this.crashed = false;
@@ -1660,21 +1661,23 @@ function hideClass(name) {
     Obstacle.types = [
     {
     type: 'VIRUS',
-    sprite: { x: 9, y: 7, width: 82, height: 86 },
-    width: 33,
-    height: 35,
-    yPos: 105,
+    // Keep the resource key; OBSLOW3 replaces the old virus with an IV stand.
+    sprite: { x: 23, y: 4, width: 62, height: 96 },
+    width: 32,
+    height: 50,
+    yPos: 90,
     maxLength: 1,
     multipleSpeed: Infinity,
     minGap: 160,
     collisionBoxes: [
-    new CollisionBox(7, 5, 19, 25),
-    new CollisionBox(3, 11, 27, 13)
+    new CollisionBox(4, 2, 16, 4),
+    new CollisionBox(9, 5, 5, 44),
+    new CollisionBox(15, 14, 11, 18)
     ]
     },
     {
     type: 'WHEELCHAIR',
-    sprite: { x: 7, y: 5, width: 86, height: 90 },
+    sprite: { x: 4, y: 0, width: 85, height: 89 },
     width: 43,
     height: 45,
     yPos: 95,

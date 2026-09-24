@@ -23,6 +23,30 @@ test('corridor and obstacles travel together at normal and sprint speeds', () =>
   assert.equal(horizon.horizonLine.corridorTravel, 0);
 });
 
+test('Infinite keeps accelerating beyond both caps while Normal and Dev retain limits', () => {
+  for (const mode of ['infinite', 'normal', 'dev']) {
+    const game = loadGame();
+    game.startFromMenu(mode);
+    const runner = game.runner;
+    runner.started = true;
+    runner.tRex.reset();
+    runner.currentSpeed = runner.config.MAX_SPEED;
+    game.advance(16);
+    if (mode === 'infinite') assert.ok(runner.currentSpeed > runner.config.MAX_SPEED);
+    else assert.equal(runner.currentSpeed, runner.config.MAX_SPEED);
+    runner.currentSpeed = runner.config.SPRINT_MAX_SPEED;
+    runner.sprintKeyHeld = true;
+    runner.updateStamina(100);
+    if (mode === 'infinite') assert.ok(runner.currentSpeed > runner.config.SPRINT_MAX_SPEED);
+    else assert.equal(runner.currentSpeed, runner.config.SPRINT_MAX_SPEED);
+    const sprintSpeed = runner.currentSpeed;
+    runner.sprintKeyHeld = false;
+    runner.updateStamina(1000);
+    if (mode === 'infinite') assert.equal(runner.currentSpeed, sprintSpeed);
+    else assert.equal(runner.currentSpeed, runner.config.MAX_SPEED);
+  }
+});
+
 test('canvas resolution includes CSS enlargement and fractional screen density', () => {
   const game = loadGame();
   const canvas = game.runner.canvas;
@@ -368,12 +392,14 @@ test('story completes automatically, Escape skips text and reduced motion reveal
   }
 });
 
-test('Dev collects its starter blue syringe and keeps one animation loop after focus', () => {
+test('Dev starts without items and keeps one animation loop after focus', () => {
   const game = loadGame();
   game.startFromMenu('dev');
-  for (let i = 0; i < 600 && game.runner.blueVaccinesCollected === 0; i++) game.advance();
+  for (let i = 0; i < 60; i++) game.advance();
   assert.equal(game.runner.hasVirusShield, false);
-  assert.equal(game.runner.blueVaccinesCollected, 1);
+  assert.equal(game.runner.blueVaccinesCollected, 0);
+  assert.equal(game.runner.hasPowerUp, false);
+  assert.equal(game.runner.powerUp, null);
   assert.equal(game.runner.crashed, false);
   assert.equal(game.frames.size, 1);
   game.runner.onVisibilityChange({ type: 'focus' });
@@ -386,6 +412,52 @@ test('Dev collects its starter blue syringe and keeps one animation loop after f
   assert.equal(game.frames.size, 1);
   assert.equal(game.runner.paused, false);
   assert.equal(game.runner.hasVirusShield, false);
+});
+
+test('Dev hotkeys grant a reusable shield and launch an instant-kill vaccine', () => {
+  const game = loadGame();
+  game.startFromMenu('dev');
+  const runner = game.runner;
+  runner.started = true;
+  runner.tRex.reset();
+  const press = key => runner.onKeyDown({ key, preventDefault() {} });
+  press('n');
+  assert.equal(runner.hasVirusShield, true);
+  assert.equal(runner.blueVaccinesCollected, 3);
+  assert.equal(runner.tRex.shieldAnimationTime, 0);
+  assert.equal(runner.hasPowerUp, false);
+  assert.equal(runner.absorbVirusCapture(), true);
+  press('N');
+  assert.equal(runner.hasVirusShield, true);
+  runner.cloneStunRemaining = 0;
+  runner.companionDrawX = runner.tRex.xPos - 60;
+  press('m');
+  assert.equal(runner.powerUpProjectile.instakill, true);
+  assert.equal(runner.cloneHealth, 3);
+  runner.updatePowerUp(16);
+  assert.equal(runner.cloneHealth, 0);
+  assert.equal(runner.cloneDefeated, true);
+  assert.equal(runner.crashed, true);
+  runner.restart();
+  assert.equal(runner.hasVirusShield, false);
+  assert.equal(runner.hasPowerUp, false);
+  assert.equal(runner.powerUpProjectile, null);
+});
+
+test('Dev shortcuts are ignored outside Dev, when paused, or after defeat', () => {
+  for (const mode of ['normal', 'infinite', 'dev']) {
+    const game = loadGame();
+    game.startFromMenu(mode);
+    const runner = game.runner;
+    runner.started = true;
+    for (const state of mode === 'dev' ? ['paused', 'crashed'] : ['playing']) {
+      runner.paused = state === 'paused';
+      runner.crashed = state === 'crashed';
+      for (const key of ['m', 'M', 'n', 'N']) runner.onKeyDown({ key, preventDefault() {} });
+      assert.equal(runner.powerUpProjectile, null);
+      assert.equal(runner.hasVirusShield, false);
+    }
+  }
 });
 
 test('entering Dev after a paused menu does not apply the menu waiting time', () => {
@@ -424,6 +496,10 @@ test('shield absorbs capture once and can be earned again', () => {
 test('Dev keeps drawing on a narrow screen when the blue pickup delays obstacles', () => {
   const game = loadGame(780);
   game.startFromMenu('dev');
+  game.runner.started = true;
+  game.runner.tRex.reset();
+  game.runner.powerUp = { x: game.runner.tRex.xPos + 50,
+    y: game.runner.tRex.groundYPos + 30, type: 'blue' };
   for (let i = 0; i < 600 && game.runner.blueVaccinesCollected === 0; i++) game.advance();
   assert.equal(game.runner.hasVirusShield, false);
   assert.equal(game.runner.blueVaccinesCollected, 1);
@@ -452,7 +528,6 @@ test('blue hits stack across shield consumption, remain visible and reset on res
   game.startFromMenu('dev');
   const runner = game.runner;
   runner.started = true;
-  runner.testShieldPending = false;
   runner.tRex.reset();
   runner.collectBlueVaccine();
   for (let i = 0; i < 2; i++) game.runner.collectBlueVaccine();
