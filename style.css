@@ -306,6 +306,45 @@ input[type=checkbox] {
   }
 }
 
+#critical-jumpscare {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+#virocrata-death {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: #fff;
+}
+#virocrata-death[hidden] { display: none; }
+#virocrata-death canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+#transformation-impact {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  image-rendering: pixelated;
+  pointer-events: none;
+  z-index: 5;
+}
+#transformation-impact[hidden] { display: none; }
+#critical-jumpscare[hidden] { display: none; }
+#critical-jumpscare img {
+  width: min(100vw, 100dvh);
+  height: min(100vw, 100dvh);
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 /* INTRODUÇÃO DO MODO NORMAL */
 #normal-intro {
   position: fixed;
@@ -331,8 +370,8 @@ input[type=checkbox] {
   inset: -12px;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(rgba(0, 0, 0, .78), rgba(0, 0, 0, .88)),
-    url('intro-virocrata.png') center / cover no-repeat, #101613;
+  background: linear-gradient(rgba(0, 0, 0, .68), rgba(0, 0, 0, .82)),
+    url('iron_lung.png') center / cover no-repeat, #101613;
   image-rendering: auto;
   filter: blur(5px);
 }
@@ -349,6 +388,20 @@ input[type=checkbox] {
   border-bottom: 1px solid #708275;
 }
 #normal-intro .intro-label { color: #b2c3b4; font-size: 11px; letter-spacing: .12em; margin: 14px 0 4px; }
+#ending-art {
+  display: block;
+  width: 320px;
+  max-width: 100%;
+  height: auto;
+  margin: 16px auto;
+  image-rendering: pixelated;
+}
+#intro-story #ending-fim {
+  text-align: center;
+  font: 400 clamp(36px, 6vw, 48px)/1.2 'VT323', monospace;
+  letter-spacing: .08em;
+  margin: 12px 0 24px;
+}
 #normal-intro h1 {
   color: #d6e8d1;
   font: 400 clamp(36px, 7vw, 64px)/1 'VT323', monospace;
@@ -745,9 +798,29 @@ body {
 .mobile-controls {
   display: none;
 }
+.mobile-controls[hidden] { display: none; }
+.mobile-tip { display: none; }
+
+body.critical-scene { background: #080305; }
+#escape-light { position: fixed; inset: 0; z-index: 50; background: #fff; pointer-events: auto; }
+#escape-light[hidden] { display: none; }
+.escape-scene #escape-status { position: fixed; top: max(16px, env(safe-area-inset-top)); left: 16px; right: 16px; width: auto; height: auto; clip-path: none; white-space: normal; text-align: center; color: #fff4db; font: 14px/1.5 monospace; z-index: 35; }
+.escape-scene [data-control="throw"], .escape-scene .mobile-tip { visibility: hidden; }
+#game-over-screen.is-victory { background: #fff; color: #29252e; }
+#game-over-screen.is-victory .victory-art { display: none; }
+#game-over-screen.is-victory #game-over-title { color: #29252e; text-shadow: none; }
+#game-over-screen.is-victory #result-message { color: #59525e; margin: 20px auto 28px; }
+.critical-scene .game-hud { background: #19090d; border-color: #793334; color: #f2d8d4; box-shadow: inset 0 0 0 2px #2e1015, 3px 3px 0 #100306; }
+.critical-scene .game-hud::before { color: #ff8e7e; border-color: #623033; }
+.critical-scene .hud-label { color: #f2d8d4; }
+.critical-scene .hud-value { color: #ffb2a2; }
+.critical-scene .hud-enemy { border-color: #623033; }
+.critical-scene .mobile-tip { color: #c39491; }
+.critical-scene .mobile-controls .mobile-control { background: #200c12; border-color: #945057; }
+.critical-scene .mobile-controls .mobile-control.is-pressed { background: #75222b; border-color: #ff9986; }
 
 @media (any-pointer: coarse) {
-  .mobile-controls:not([hidden]) {
+  .mobile-controls {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -758,6 +831,7 @@ body {
     z-index: 30;
     gap: 8px;
     pointer-events: none;
+    height: clamp(64px, 22dvh, 88px);
   }
 
   .mobile-actions {
@@ -767,16 +841,16 @@ body {
 
   .mobile-controls .mobile-control {
     float: none;
-    width: auto;
-    min-width: 72px;
-    height: 60px;
+    width: clamp(80px, 26vw, 140px);
+    min-width: 0;
+    height: clamp(64px, 22dvh, 88px);
     margin: 0;
-    padding: 12px;
+    padding: 12px 8px;
     border: 2px solid #64748b;
     border-radius: 12px;
     background: #0f172a;
     color: #fff;
-    font: bold 12px monospace;
+    font: bold clamp(12px, 3.5vw, 16px) monospace;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -1175,5 +1249,88 @@ body > .onlyforchrome {
   .nav-wrapper {
     margin-top: 30px;
   }
+}
+
+/* Menus use viewport pixels independently of the scaled game canvas. */
+html { overscroll-behavior: none; }
+body { -webkit-text-size-adjust: 100%; }
+button { touch-action: manipulation; }
+.offline .controller { width: 100%; height: 100%; touch-action: none; }
+.runner-canvas { touch-action: none; }
+#game-over-screen {
+  position: fixed;
+  height: 100%;
+  height: 100dvh;
+  z-index: 40;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+#game-over-screen .game-over-card { width: min(100%, 660px); max-width: 660px; box-sizing: border-box; margin: auto; padding: 12px; }
+#game-over-screen:not(.is-victory) .game-over-card { grid-template-columns: minmax(100px, 180px) minmax(0, 1fr); gap: 12px 20px; }
+#game-over-screen .defeat-art { width: 100%; height: auto; }
+#game-over-screen .start-eyebrow { font-size: 13px; }
+#game-over-screen #game-over-title { font-size: clamp(18px, 3vw, 28px); line-height: 1.25; max-width: 560px; }
+#game-over-screen #result-message { font-size: 15px; line-height: 1.5; max-width: 500px; margin: 8px auto; }
+#game-over-screen .result-score { font-size: 16px; }
+#game-over-screen .mode-buttons { flex-wrap: wrap; gap: 12px; }
+#game-over-screen .play-button { float: none; width: auto; min-height: 48px; height: auto; margin: 0; padding: 12px 16px; font-size: 14px; line-height: 1.3; }
+#game-over-screen .victory-art { width: clamp(80px, 22dvh, 160px); height: auto; }
+#normal-intro { padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+#normal-intro button { height: auto; margin: 0; float: none; }
+#dev-dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; }
+.dev-actions button { min-height: 48px; height: auto; }
+
+@media (any-pointer: coarse) {
+  /* Reserve a separate strip so the HUD never covers obstacles. */
+  .game-hud {
+    box-sizing: border-box;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    width: auto;
+    height: 88px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: center;
+    gap: 6px 12px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .game-hud::before { grid-column: 1 / -1; font-size: 10px; letter-spacing: 0; padding-bottom: 3px; }
+  .hud-panel { gap: 5px; }
+  .hud-row, .hud-group { gap: 6px; }
+  .hud-row { flex-wrap: wrap; }
+  .hud-enemy { padding: 0 0 0 10px; border-top: 0; border-left: 1px solid #c4d5da; }
+  .hud-enemy-status { max-width: none; }
+  .hud-value { font-size: 13px; }
+  .hud-held { font-size: 10px; padding: 2px 4px; }
+  #hud-score { width: auto; font-size: 12px; white-space: normal; }
+  #start-screen { box-sizing: border-box; height: 100dvh; overflow-y: auto; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+  .start-art-menu { width: min(100%, calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)))); }
+  .intro-actions { gap: 8px; }
+  #normal-intro button { min-height: 48px; }
+}
+
+@media (any-pointer: coarse) and (orientation: landscape) {
+  .game-hud { height: 64px; }
+  .game-hud::before { display: none; }
+}
+
+@media (any-pointer: coarse) and (orientation: portrait) {
+  .mobile-tip { display: block; position: absolute; bottom: 100%; left: 0; right: 0; margin: 0 0 16px; color: #365f69; text-align: center; font: 12px/1.5 monospace; }
+}
+
+@media (max-width: 480px) {
+  #game-over-screen:not(.is-victory) .game-over-card { display: flex; flex-direction: column; gap: 10px; }
+  #game-over-screen .defeat-art { width: min(160px, 28dvh); }
+  #game-over-screen .mode-buttons { width: 100%; }
+  #game-over-screen .play-button { flex: 1 1 100%; }
+}
+
+@media (any-pointer: coarse) and (max-width: 380px) {
+  .game-hud { font-size: 10px; gap: 5px 8px; padding: 6px; }
+  .hud-held { font-size: 9px; }
 }
 

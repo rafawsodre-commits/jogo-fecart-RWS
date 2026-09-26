@@ -185,6 +185,8 @@ function hideClass(name) {
     {name: 'SHIELD_ACTIVATION', id: 'paciente-shield-sprite'},
     {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
+    {name: 'HYPER_CLONE', id: 'hyper-clone-sprite'},
+    {name: 'EXIT_DOOR', id: 'exit-door-sprite'},
     {name: 'GROUND', id: 'corridor-scenery'},
     {name: 'WHEELCHAIR', id: 'obstacle-wheelchair'},
     {name: 'VIRUS', id: 'obstacle-virus'},
@@ -200,6 +202,8 @@ function hideClass(name) {
     {name: 'SHIELD_ACTIVATION', id: 'paciente-shield-sprite'},
     {name: 'WALL_PICTURE', id: 'wall-picture'},
     {name: 'CLONE', id: 'clone-sprite'},
+    {name: 'HYPER_CLONE', id: 'hyper-clone-sprite'},
+    {name: 'EXIT_DOOR', id: 'exit-door-sprite'},
     {name: 'GROUND', id: 'corridor-scenery'},
     {name: 'WHEELCHAIR', id: 'obstacle-wheelchair'},
     {name: 'VIRUS', id: 'obstacle-virus'},
@@ -348,6 +352,7 @@ function hideClass(name) {
     this.setSpeed();
     this.containerEl = document.createElement('div');
     this.containerEl.className = Runner.classes.CONTAINER;
+    this.containerEl.appendChild(document.getElementById('transformation-impact'));
     // Player canvas container.
     this.canvas = createCanvas(this.containerEl, this.dimensions.WIDTH,
     this.dimensions.HEIGHT, Runner.classes.PLAYER);
@@ -412,7 +417,6 @@ function hideClass(name) {
     this.containerEl.style.width = this.dimensions.WIDTH + 'px';
     this.containerEl.style.height = this.dimensions.HEIGHT + 'px';
     this.distanceMeter.update(0, Math.ceil(this.distanceRan));
-    this.stop();
     } else {
     this.tRex.draw(0, 0);
     }
@@ -474,6 +478,42 @@ function hideClass(name) {
     var now = getTimeStamp();
     var deltaTime = now - (this.time || now);
     this.time = now;
+    if (this.deathRemaining > 0) {
+    this.deathRemaining = Math.max(0, this.deathRemaining - deltaTime);
+    this.drawDeathCamera();
+    if (this.deathRemaining === 0) {
+    document.getElementById('virocrata-death').hidden = true;
+    this.startEscape();
+    } else this.raq();
+    return;
+    }
+    if (this.impactRemaining > 0) {
+    this.impactRemaining = Math.max(0, this.impactRemaining - deltaTime);
+    if (this.impactRemaining === 0) {
+    document.getElementById('transformation-impact').hidden = true;
+    this.showCriticalJumpscare();
+    }
+    this.raq();
+    return;
+    }
+    if (this.jumpscareRemaining > 0) {
+    this.jumpscareRemaining = Math.max(0, this.jumpscareRemaining - deltaTime);
+    this.cloneStunRemaining = this.jumpscareRemaining;
+    if (this.jumpscareRemaining === 0) {
+    document.getElementById('critical-jumpscare').hidden = true;
+    if (this.cloneFrozenX !== null) {
+    this.companionXPos = this.cloneFrozenX + this.companionGap;
+    this.companionDrawX = this.cloneFrozenX;
+    this.cloneFrozenX = null;
+    }
+    }
+    this.raq();
+    return;
+    }
+    if (this.escapeActive) {
+    this.updateEscape(Math.min(deltaTime, 50));
+    return;
+    }
     if (this.activated) {
     this.updateStamina(deltaTime);
     this.updateFootsteps(deltaTime);
@@ -528,6 +568,10 @@ function hideClass(name) {
     if (!this.crashed) {
     this.tRex.update(deltaTime);
     this.updatePowerUp(deltaTime);
+    if (this.jumpscareRemaining > 0) {
+    this.raq();
+    return;
+    }
     this.drawCompanion(deltaTime);
     if (!this.crashed) {
     this.drawStaminaBar();
@@ -607,7 +651,8 @@ function hideClass(name) {
     var cloneDrawY = this.tRex.groundYPos + Trex.config.HEIGHT - cloneSize;
     this.canvasCtx.save();
     this.canvasCtx.imageSmoothingEnabled = false;
-    this.canvasCtx.drawImage(this.images.CLONE, sourceX, 0, 97, 97,
+    var cloneImage = this.cloneHealth === 1 ? this.images.HYPER_CLONE : this.images.CLONE;
+    this.canvasCtx.drawImage(cloneImage, sourceX, 0, 97, 97,
     cloneDrawX, cloneDrawY, cloneSize, cloneSize);
     this.canvasCtx.restore();
     if (this.cloneStunRemaining > 0) {
@@ -729,8 +774,26 @@ function hideClass(name) {
     this.powerUpProjectile.y < this.tRex.groundYPos + Trex.config.HEIGHT &&
     this.powerUpProjectile.y + size > this.tRex.groundYPos) {
     if (this.powerUpProjectile.type === 'red') {
-    this.cloneHealth = this.gameMode === 'dev' && this.powerUpProjectile.instakill ?
-    0 : Math.max(0, this.cloneHealth - 1);
+    this.cloneHealth = Math.max(0, this.cloneHealth - 1);
+    if (this.cloneHealth === 1 && !this.jumpscareShown) {
+    this.jumpscareShown = true;
+    // Seventeen GIF frames, 110 ms each; the asset has no animation loop.
+    this.jumpscareRemaining = 1870;
+    this.cloneStunRemaining = this.jumpscareRemaining;
+    this.cloneFrozenX = this.companionDrawX;
+    this.cloneFrozenSourceX = this.cloneSourceX;
+    resetMobileControls();
+    var impactX = this.companionDrawX + Trex.config.WIDTH - 100;
+    var impactY = this.tRex.groundYPos + Trex.config.HEIGHT - 100;
+    if (impactX + 100 > 0 && impactX < this.dimensions.WIDTH && impactY + 100 > 0 && impactY < this.dimensions.HEIGHT) {
+    var impact = document.getElementById('transformation-impact');
+    impact.style.left = impactX + 'px';
+    impact.style.top = impactY + 'px';
+    impact.src = 'frame_impact.gif?play=' + getTimeStamp();
+    impact.hidden = false;
+    this.impactRemaining = 280;
+    } else this.showCriticalJumpscare();
+    }
     if (this.cloneHealth === 0) {
     this.cloneDefeated = true;
     this.cloneStunRemaining = 0;
@@ -759,6 +822,10 @@ function hideClass(name) {
     this.drawPowerUpVaccine(this.powerUpProjectile.x,
     this.powerUpProjectile.y, size, this.powerUpProjectile.type);
     }
+    },
+    showCriticalJumpscare: function() {
+    document.getElementById('critical-jumpscare-image').src = 'mega_jumps-once.gif?play=' + getTimeStamp();
+    document.getElementById('critical-jumpscare').hidden = false;
     },
     /** Reserve room for the full syringe sprite and a safe approach. */
     isPowerUpPositionClear: function(x) {
@@ -846,8 +913,8 @@ function hideClass(name) {
     }
     },
     /** Throw the stored cube backwards toward the clone. */
-    throwPowerUp: function(opt_instakill) {
-    var devShot = opt_instakill === true && this.gameMode === 'dev';
+    throwPowerUp: function(opt_devShot) {
+    var devShot = opt_devShot === true && this.gameMode === 'dev';
     if ((!this.hasPowerUp && !devShot) || this.powerUpProjectile || !this.started) {
     return;
     }
@@ -855,8 +922,7 @@ function hideClass(name) {
     this.powerUpProjectile = {
     x: this.tRex.xPos - this.config.POWER_UP_SIZE,
     y: (devShot ? this.tRex.groundYPos : this.tRex.yPos) + Math.floor(Trex.config.HEIGHT / 2),
-    type: devShot ? 'red' : this.storedPowerUpType,
-    instakill: devShot
+    type: devShot ? 'red' : this.storedPowerUpType
     };
     this.tRex.throwAnimationTime = 0;
     if (!devShot) this.storedPowerUpType = null;
@@ -892,6 +958,7 @@ function hideClass(name) {
     drawStaminaBar: function() {
     var hud = this.getHud();
     hud['game-hud'].hidden = isStartMenuOpen() || this.crashed;
+    document.body.classList.toggle('critical-scene', this.cloneHealth === 1 && !hud['game-hud'].hidden);
     hud['hud-stamina'].style.width =
     (100 * Math.max(0, Math.min(1, this.stamina / this.config.STAMINA_MAX))) + '%';
     hud['hud-stamina'].style.backgroundColor = this.stamina > 30 ? '#35d4b2' : '#f7c65b';
@@ -953,15 +1020,22 @@ function hideClass(name) {
     * @param {Event} e
     */
     onKeyDown: function(e) {
+    if (this.deathRemaining > 0) return;
+    if (this.jumpscareRemaining > 0) return;
+    if (this.escapeActive) {
+    if (e.key === 'ArrowRight' || e.keyCode === 39) { e.preventDefault(); mobileAction('run', true); }
+    if (Runner.keycodes.JUMP[String(e.keyCode)]) { e.preventDefault(); mobileAction('jump', true); }
+    return;
+    }
     if (isStartMenuOpen()) return;
     if (this.gameMode === 'dev' && this.started && !this.crashed && !this.paused) {
     var devKey = (e.key || '').toLowerCase();
-    var devKill = devKey === 'm' || e.code === 'KeyM' || e.keyCode === 77;
+    var devVaccine = devKey === 'm' || e.code === 'KeyM' || e.keyCode === 77;
     var devShield = devKey === 'n' || e.code === 'KeyN' || e.keyCode === 78;
-    if (devKill || devShield) {
+    if (devVaccine || devShield) {
     e.preventDefault();
     if (e.repeat) return;
-    if (devKill) {
+    if (devVaccine) {
     this.throwPowerUp(true);
     } else {
     this.blueVaccinesCollected = this.config.BLUE_VACCINES_FOR_SHIELD - 1;
@@ -1012,6 +1086,11 @@ function hideClass(name) {
     * @param {Event} e
     */
     onKeyUp: function(e) {
+    if (this.escapeActive) {
+    if (e.key === 'ArrowRight' || e.keyCode === 39) mobileAction('run', false);
+    if (Runner.keycodes.JUMP[String(e.keyCode)]) mobileAction('jump', false);
+    return;
+    }
     if (isStartMenuOpen()) return;
     var keyCode = String(e.keyCode);
     var isSpeedUp = Runner.keycodes.SPEED_UP[keyCode] ||
@@ -1063,6 +1142,10 @@ function hideClass(name) {
     * Game over state.
     */
     gameOver: function(won) {
+    this.impactRemaining = 0;
+    document.getElementById('transformation-impact').hidden = true;
+    this.jumpscareRemaining = 0;
+    document.getElementById('critical-jumpscare').hidden = true;
     if (this.crashed) {
     return;
     }
@@ -1094,8 +1177,200 @@ function hideClass(name) {
     }
     // Reset the time clock.
     this.time = getTimeStamp();
-    showGameOverScreen(won,
-    this.distanceMeter.getActualDistance(this.distanceRan));
+    if (won && this.cloneHealth === 0 && (this.gameMode === 'normal' || this.gameMode === 'dev')) {
+    this.deathRemaining = 2400;
+    this.deathRemainsX = this.companionDrawX + Trex.config.WIDTH - 100;
+    document.getElementById('game-hud').hidden = true;
+    mobileControls.hidden = true;
+    document.getElementById('virocrata-death').hidden = false;
+    this.drawDeathCamera();
+    this.raq();
+    } else if (won) this.startEscape();
+    else showGameOverScreen(false, this.distanceMeter.getActualDistance(this.distanceRan));
+    },
+    drawDeathCamera: function() {
+    var camera = document.getElementById('virocrata-death-camera');
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+    if (camera.width !== width) camera.width = width;
+    if (camera.height !== height) camera.height = height;
+    var ctx = camera.getContext('2d');
+    var elapsed = 2400 - this.deathRemaining;
+    var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var progress = Math.min(1, elapsed / 900);
+    if (reducedMotion) progress = 1;
+    progress = progress * progress * progress * (progress * (progress * 6 - 15) + 10);
+    var endScale = Math.min(width / 160, height / 140);
+    var startScale = endScale * 0.78;
+    var scale = startScale + (endScale - startScale) * progress;
+    var bossX = this.companionDrawX + Trex.config.WIDTH - 50;
+    var bossY = this.tRex.groundYPos + Trex.config.HEIGHT - 50;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(width * 0.42, height * 0.5);
+    ctx.scale(scale, scale);
+    ctx.translate(-bossX, -bossY);
+    var remainsOpacity = Math.max(0, Math.min(1, (elapsed - 1400) / 160));
+    if (reducedMotion) remainsOpacity = elapsed >= 1400 ? 1 : 0;
+    var deathImage = document.getElementById('death-sprite');
+    var remainsImage = document.getElementById('virocrata-remains');
+    var deathReady = deathImage && deathImage.complete && deathImage.naturalWidth > 0;
+    var remainsReady = remainsImage && remainsImage.complete && remainsImage.naturalWidth > 0;
+    if (!remainsReady) remainsOpacity = 0;
+    if (remainsOpacity < 1) {
+    var frame = Math.min(13, Math.floor(elapsed / 100));
+    ctx.globalAlpha = 1 - remainsOpacity;
+    var deathFallback = deathReady ? deathImage : this.images.HYPER_CLONE;
+    if (deathFallback && deathFallback.complete && deathFallback.naturalWidth > 0) {
+    ctx.drawImage(deathFallback, deathReady ? frame * 97 : 0, 0, 97, 97,
+    bossX - 50, bossY - 50, 100, 100);
+    }
+    }
+    if (remainsOpacity > 0) {
+    ctx.globalAlpha = remainsOpacity;
+    ctx.drawImage(document.getElementById('virocrata-remains'), bossX - 50, bossY - 50, 100, 100);
+    }
+    ctx.restore();
+    },
+    /** A quiet exit sequence, separate from gameplay and collision updates. */
+    startEscape: function() {
+    this.escapeActive = true;
+    this.escapeElapsed = 0;
+    this.escapePlayerTime = 0;
+    document.getElementById('mobile-run').textContent = 'andar...';
+    this.escapeDoorTime = 0;
+    this.escapeEntering = null;
+    this.escapeStartX = this.tRex.xPos;
+    this.escapeWalkDistance = 0;
+    this.escapeCamera = 0;
+    this.escapeRestore = 0;
+    this.escapeLongWalk = this.gameMode === 'normal' || this.gameMode === 'dev';
+    this.escapePathLength = 1500;
+    this.escapeReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.paused = false;
+    this.tRex.reset();
+    this.tRex.throwAnimationTime = null;
+    this.tRex.shieldAnimationTime = null;
+    this.tRex.update(0, Trex.status.RUNNING);
+    document.getElementById('game-hud').hidden = true;
+    mobileControls.hidden = false;
+    gameOverScreen.classList.add('is-hidden');
+    document.body.classList.add('critical-scene');
+    document.body.classList.add('escape-scene');
+    document.getElementById('escape-light').hidden = true;
+    document.getElementById('escape-light').style.opacity = '0';
+    document.getElementById('escape-status').textContent = 'Vá até a luz. Segure andar... ou a seta → para caminhar.';
+    this.updateEscape(0);
+    },
+    updateEscape: function(deltaTime) {
+    this.escapeElapsed += deltaTime;
+    var duration = this.escapeReducedMotion ? 1200 : 2200;
+    var ctx = this.canvasCtx;
+    var doorX = this.dimensions.WIDTH - 100;
+    if (this.escapeLongWalk) {
+    var previousCamera = this.escapeCamera;
+    if (this.escapeEntering === null && this.sprintKeyHeld) {
+    this.escapeWalkDistance = Math.min(this.escapePathLength, this.escapeWalkDistance + deltaTime * 0.13);
+    }
+    var cameraLead = Math.max(0, Math.min(160, this.dimensions.WIDTH - 200 - this.escapeStartX));
+    this.escapeCamera = Math.max(0, this.escapeWalkDistance - cameraLead);
+    this.horizon.horizonLine.corridorTravel += this.escapeCamera - previousCamera;
+    this.tRex.xPos = this.escapeStartX + this.escapeWalkDistance - this.escapeCamera;
+    doorX = this.escapeStartX + this.escapePathLength - this.escapeCamera;
+    var restoreProgress = Math.min(1, this.escapeWalkDistance / (this.escapePathLength * 0.95));
+    this.escapeRestore = restoreProgress * restoreProgress * (3 - 2 * restoreProgress);
+    if (this.escapeRestore === 1) document.body.classList.remove('critical-scene');
+    }
+    if (this.escapeEntering === null) {
+    if (this.sprintKeyHeld && !this.escapeLongWalk) this.tRex.xPos = Math.min(doorX, this.tRex.xPos + deltaTime * 0.13);
+    if (this.tRex.jumping) this.tRex.updateJump(deltaTime, this.config);
+    if (this.sprintKeyHeld && this.tRex.xPos >= doorX && !this.tRex.jumping) {
+    this.escapeEntering = 0;
+    resetMobileControls();
+    mobileControls.hidden = true;
+    document.getElementById('escape-light').hidden = false;
+    document.getElementById('escape-status').textContent = 'Você atravessa a porta.';
+    }
+    } else {
+    this.escapeEntering += deltaTime;
+    this.tRex.xPos = doorX;
+    }
+    var elapsed = this.escapeEntering === null ? 0 : this.escapeEntering;
+    var ground = this.horizon.horizonLine.yPos;
+    this.escapeDoorX = doorX;
+    this.clearCanvas();
+    this.horizon.horizonLine.draw();
+    var remains = document.getElementById('virocrata-remains');
+    if (this.deathRemainsX != null && remains && remains.complete && remains.naturalWidth > 0) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(document.getElementById('virocrata-remains'),
+    this.deathRemainsX - this.escapeCamera, this.tRex.groundYPos + Trex.config.HEIGHT - 100, 100, 100);
+    ctx.restore();
+    }
+    ctx.save();
+    doorX = Math.round(doorX);
+    ctx.imageSmoothingEnabled = false;
+    var glow = ctx.createRadialGradient(doorX + 21, ground - 30, 4, doorX + 21, ground - 30, 65);
+    glow.addColorStop(0, 'rgba(235, 250, 255, 0.42)');
+    glow.addColorStop(0.55, 'rgba(220, 240, 245, 0.12)');
+    glow.addColorStop(1, 'rgba(220, 240, 245, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(doorX - 44, ground - 95, 130, 118);
+    // Play the supplied automatic door once as the patient approaches.
+    if (doorX - this.tRex.xPos <= 240 || this.escapeDoorTime > 0) {
+    this.escapeDoorTime = Math.min(1690, this.escapeDoorTime + deltaTime);
+    }
+    var doorFrame = Math.min(12, Math.floor(this.escapeDoorTime / 130));
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(doorX - 14, ground - 70, 70, 70);
+    ctx.drawImage(this.images.EXIT_DOOR, doorFrame * 100, 0, 100, 100,
+    doorX - 14, ground - 70, 70, 70);
+    // Exit sign is drawn in canvas pixels to stay aligned with the doorway.
+    ctx.fillStyle = '#d7e4e7';
+    ctx.fillRect(doorX + 4, ground - 82, 34, 11);
+    ctx.fillStyle = '#36695f';
+    ctx.fillRect(doorX + 5, ground - 81, 32, 9);
+    ctx.fillStyle = '#f1fff8';
+    ctx.font = '7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SAÍDA', doorX + 21, ground - 74);
+    var floorLight = ctx.createLinearGradient(0, ground, 0, ground + 23);
+    floorLight.addColorStop(0, 'rgba(240, 253, 255, 0.4)');
+    floorLight.addColorStop(1, 'rgba(240, 253, 255, 0)');
+    ctx.fillStyle = floorLight;
+    ctx.beginPath();
+    ctx.moveTo(doorX + 3, ground + 1);
+    ctx.lineTo(doorX + 39, ground + 1);
+    ctx.lineTo(doorX + 59, ground + 23);
+    ctx.lineTo(doorX - 17, ground + 23);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1 - Math.min(1, elapsed / 600);
+    if (this.sprintKeyHeld && this.escapeEntering === null) this.escapePlayerTime += deltaTime;
+    var walkFrame = Math.floor(this.escapePlayerTime / 200) % 3;
+    var walkScale = this.tRex.config.HEIGHT / 59;
+    var exitPlayer = document.getElementById('exit-player-sprite');
+    if (exitPlayer && exitPlayer.complete && exitPlayer.naturalWidth > 0) {
+    // Crop only the character, excluding the isolated pixel in the GIF margin.
+    ctx.drawImage(exitPlayer, walkFrame * 97 + 20, 24, 24, 59,
+    this.tRex.xPos + this.tRex.config.WIDTH / 2 - 11 * walkScale,
+    this.tRex.yPos, 24 * walkScale, this.tRex.config.HEIGHT);
+    } else this.tRex.draw(94, 0);
+    ctx.restore();
+    var fade = this.escapeReducedMotion ? elapsed / duration : (elapsed - 300) / 1600;
+    document.getElementById('escape-light').style.opacity = Math.max(0, Math.min(1, fade));
+    if (elapsed >= duration) {
+    this.escapeActive = false;
+    this.stop();
+    document.body.classList.remove('escape-scene');
+    document.body.classList.remove('critical-scene');
+    if (this.gameMode === 'normal' || this.gameMode === 'dev') window.normalEnding.open();
+    else showGameOverScreen(true, this.distanceMeter.getActualDistance(this.distanceRan));
+    document.getElementById('escape-light').hidden = true;
+    } else this.raq();
     },
     stop: function() {
     resetMobileControls();
@@ -1118,6 +1393,20 @@ function hideClass(name) {
     }
     },
     restart: function() {
+    this.deathRemainsX = null;
+    if (this.deathRemaining > 0) this.stop();
+    this.deathRemaining = 0;
+    document.getElementById('virocrata-death').hidden = true;
+    this.impactRemaining = 0;
+    document.getElementById('transformation-impact').hidden = true;
+    this.jumpscareRemaining = 0;
+    this.jumpscareShown = false;
+    document.getElementById('critical-jumpscare').hidden = true;
+    if (this.escapeActive) {
+    this.escapeActive = false;
+    this.stop();
+    document.getElementById('escape-light').hidden = true;
+    }
     if (!this.raqId) {
     hideGameOverScreen();
     this.playCount++;
@@ -1156,6 +1445,7 @@ function hideClass(name) {
     this.clearCanvas();
     this.distanceMeter.reset(this.highestScore);
     this.horizon.reset();
+    this.tRex.xPos = this.tRex.config.START_X_POS;
     this.tRex.shieldAnimationTime = null;
     this.tRex.throwAnimationTime = null;
     this.tRex.reset();
@@ -1167,6 +1457,15 @@ function hideClass(name) {
     * Pause the game if the tab is not in focus.
     */
     onVisibilityChange: function(e) {
+    if (this.escapeActive || this.deathRemaining > 0) {
+    if (document.hidden || document.webkitHidden || e.type === 'blur') this.stop();
+    else {
+    this.paused = false;
+    this.time = getTimeStamp();
+    this.raq();
+    }
+    return;
+    }
     if (document.hidden || document.webkitHidden || e.type == 'blur') {
     this.stop();
     } else {
@@ -2289,6 +2588,7 @@ function hideClass(name) {
     */
     function HorizonLine(canvas, bgImg, pictureImg) {
     this.image = bgImg;
+    this.oneShotImage = document.getElementById('corridor-one-shot');
     this.pictureImage = pictureImg;
     this.canvas = canvas;
     this.canvasCtx = canvas.getContext('2d');
@@ -2377,10 +2677,41 @@ function hideClass(name) {
     }
     },
     /** A continuous corridor with individually spaced hospital details. */
-    drawCorridor: function() {
+    drawCorridor: function(criticalOverride) {
     var ctx = this.canvasCtx;
+    var runner = Runner.instance_;
+    if (criticalOverride === undefined && runner && runner.escapeActive && runner.escapeLongWalk) {
+    var restore = runner.escapeRestore;
+    if (restore < 1) this.drawCorridor(true);
+    if (restore === 1) this.drawCorridor(false);
+    else if (restore > 0) {
+    // Blend complete scenes once, so individual details and grading cannot
+    // override the transition opacity or abruptly brighten the corridor.
+    if (!this.restoreCanvas) {
+    this.restoreCanvas = document.createElement('canvas');
+    this.restoreCanvas.width = Runner.defaultDimensions.WIDTH;
+    this.restoreCanvas.height = Runner.defaultDimensions.HEIGHT;
+    }
+    var restoreCtx = this.restoreCanvas.getContext('2d');
+    restoreCtx.clearRect(0, 0, this.restoreCanvas.width, this.restoreCanvas.height);
+    this.canvasCtx = restoreCtx;
+    try {
+    this.drawCorridor(false);
+    } finally {
+    this.canvasCtx = ctx;
+    }
+    ctx.save();
+    ctx.globalAlpha = restore;
+    ctx.drawImage(this.restoreCanvas, 0, 0);
+    ctx.restore();
+    }
+    return;
+    }
     var width = Runner.defaultDimensions.WIDTH;
     var travel = this.corridorTravel || 0;
+    var critical = Runner.instance_ && (Runner.instance_.cloneHealth === 1 || Runner.instance_.escapeActive) &&
+    this.oneShotImage && this.oneShotImage.complete && this.oneShotImage.naturalWidth > 0;
+    if (criticalOverride !== undefined) critical = criticalOverride && this.oneShotImage && this.oneShotImage.complete && this.oneShotImage.naturalWidth > 0;
     if (!this.corridorSections) {
     this.corridorSections = [];
     this.corridorEnd = 0;
@@ -2405,20 +2736,36 @@ function hideClass(name) {
     });
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = critical ? '#240607' : '#ffffff';
     ctx.fillRect(0, 0, width, this.yPos);
+    if (critical) {
+    ctx.fillStyle = '#180000';
+    ctx.fillRect(0, this.yPos - 46, width, 46);
+    }
     ctx.fillStyle = '#c4d5da';
     ctx.fillRect(0, this.yPos, width, 23);
-    ctx.fillStyle = '#799da8';
+    ctx.fillStyle = critical ? '#180000' : '#799da8';
     ctx.fillRect(0, this.yPos - 4, width, 4);
     ctx.fillStyle = '#a6bec6';
     ctx.fillRect(0, this.yPos + 12, width, 1);
-    var scenery = this.image;
+    if (critical) {
+    // Repeat only the painted floor, excluding the empty parts of the sheet.
+    for (var floorX = -(travel % 96); floorX < width; floorX += 96) {
+    ctx.drawImage(this.oneShotImage, 324, 813, 256, 65,
+    floorX, this.yPos, 96, 23);
+    }
+    }
+    var scenery = critical ? this.oneShotImage : this.image;
     // Keep doors near the player's height, with all decor on the same scale.
     var sceneryScale = 0.75;
     var baseline = this.yPos;
+    function overlapsExit(x, itemWidth) {
+    return runner && runner.escapeActive &&
+    x < runner.escapeDoorX + 76 && x + itemWidth > runner.escapeDoorX - 34;
+    }
     function detail(sx, sy, sw, sh, x, bottom, scale) {
     scale *= sceneryScale;
+    if (overlapsExit(x, Math.round(sw * scale))) return;
     bottom = baseline - (baseline - bottom) * sceneryScale;
     ctx.drawImage(scenery, sx, sy, sw, sh,
     x, Math.round(bottom - sh * scale),
@@ -2427,7 +2774,7 @@ function hideClass(name) {
     for (var i = 0; i < this.corridorSections.length; i++) {
     var section = this.corridorSections[i];
     var x = section.x - travel;
-    if (section.picture && this.pictureImage) {
+    if (!critical && section.picture && this.pictureImage && !overlapsExit(x + section.pictureX, 34)) {
     // Crop the empty upper part; keep the frame and hanging cord together.
     ctx.drawImage(this.pictureImage, 0, 105, 100, 90,
     x + section.pictureX, section.pictureY, 34, 30.6);
@@ -2440,8 +2787,12 @@ function hideClass(name) {
     detail(689, 479, 119, 34, x + 125, this.yPos, 0.85);
     detail(680, 427, 16, 29, doorX + 48, 83, 0.8);
     } else if (section.variant === 2) {
+    if (critical) {
+    detail(431, 695, 33, 33, doorX - 10, 43, 0.8);
+    } else {
     detail(479, 667, 63, 22, doorX - 10, 43, 0.8);
     detail(479, 726, 32, 39, x + 140, 88, 0.7);
+    }
     } else if (section.variant === 3) {
     detail(68, 754, 21, 59, x + 145, this.yPos, 0.85);
     detail(76, 672, 40, 18, x + 120, 39, 0.8);
@@ -2450,9 +2801,37 @@ function hideClass(name) {
     }
     }
     // Soften fine, high-contrast details without affecting gameplay sprites.
+    if (critical) {
+    // Grade only scenery; characters, pickups and obstacles remain readable.
+    ctx.fillStyle = 'rgba(12, 0, 3, 0.64)';
+    ctx.fillRect(0, 0, width, 150);
+    ctx.fillStyle = 'rgba(65, 0, 6, 0.6)';
+    ctx.fillRect(0, this.yPos, width, 23);
+    for (var lampX = 110 - (travel % 240); lampX < width + 90; lampX += 240) {
+    if (overlapsExit(lampX - 14, 28)) continue;
+    var glow = ctx.createRadialGradient(lampX, 18, 2, lampX, 18, 115);
+    glow.addColorStop(0, 'rgba(255, 35, 15, 0.35)');
+    glow.addColorStop(0.45, 'rgba(180, 8, 8, 0.14)');
+    glow.addColorStop(1, 'rgba(90, 0, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(lampX - 115, 0, 230, 150);
+    ctx.fillStyle = '#36080a';
+    ctx.fillRect(lampX - 14, 8, 28, 8);
+    ctx.fillStyle = '#ff4935';
+    ctx.fillRect(lampX - 10, 11, 20, 3);
+    }
+    var shadow = ctx.createLinearGradient(0, 0, 0, 150);
+    shadow.addColorStop(0, 'rgba(0, 0, 0, 0.75)');
+    shadow.addColorStop(0.3, 'rgba(0, 0, 0, 0)');
+    shadow.addColorStop(0.8, 'rgba(0, 0, 0, 0)');
+    shadow.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
+    ctx.fillStyle = shadow;
+    ctx.fillRect(0, 0, width, 150);
+    } else {
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = '#e8ede9';
     ctx.fillRect(0, 0, width, this.yPos);
+    }
     ctx.restore();
     },
     /** Draw only the painted bottom strip from the custom 600px sprite. */
@@ -2681,16 +3060,33 @@ function hideClass(name) {
     })();
 function fitGameToWindow() {
   var game = document.getElementById('main-frame-error');
+  var hud = document.getElementById('game-hud');
+  var controls = document.getElementById('mobile-controls');
   var sceneHeight = Runner.defaultDimensions.HEIGHT;
   var touchLayout = window.matchMedia('(any-pointer: coarse)').matches;
-  var availableHeight = Math.max(100, window.innerHeight - (touchLayout ? 104 : 0));
+  if (touchLayout) hud.style.top = '';
+  var viewport = window.visualViewport;
+  var width = viewport ? viewport.width : window.innerWidth;
+  var height = viewport ? viewport.height : window.innerHeight;
+  // Read the actual safe-area spacing and responsive control sizes from CSS.
+  var hudStyle = window.getComputedStyle(hud);
+  var controlsStyle = window.getComputedStyle(controls);
+  var topInset = touchLayout ? (parseFloat(hudStyle.top) || 12) +
+    (parseFloat(hudStyle.height) || 88) + 8 : 0;
+  var bottomInset = touchLayout ? (parseFloat(controlsStyle.bottom) || 12) +
+    (parseFloat(controlsStyle.height) || 88) + 12 : 0;
+  var left = touchLayout ? (parseFloat(controlsStyle.left) || 12) : 0;
+  var right = touchLayout ? (parseFloat(controlsStyle.right) || 12) : 0;
+  var availableWidth = Math.max(1, width - left - right);
+  var availableHeight = Math.max(1, height - topInset - bottomInset);
   var scale = Math.min(availableHeight / sceneHeight, 2.5,
-    touchLayout ? window.innerWidth / 600 : Infinity);
-  var top = (availableHeight - sceneHeight * scale) / 2;
+    touchLayout ? availableWidth / (width < height ? 480 : 600) : Infinity);
+  var top = topInset + (availableHeight - sceneHeight * scale) / 2;
 
-  game.style.width = (window.innerWidth / scale) + 'px';
+  game.style.width = (availableWidth / scale) + 'px';
+  game.style.left = left + 'px';
   game.style.top = top + 'px';
-  document.getElementById('game-hud').style.top = (top + 6) + 'px';
+  hud.style.top = touchLayout ? '' : (top + 6) + 'px';
   game.style.transform = 'scale(' + scale + ')';
   Runner.displayScale = scale;
 
@@ -2701,6 +3097,10 @@ function fitGameToWindow() {
 
 fitGameToWindow();
 window.addEventListener('resize', fitGameToWindow);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', function() {
+  resetMobileControls();
+  fitGameToWindow();
+});
 var runner = new Runner('.interstitial-wrapper');
 var startScreen = document.getElementById('start-screen');
 var gameOverScreen = document.getElementById('game-over-screen');
@@ -2725,6 +3125,11 @@ function resetMobileControls() {
 }
 
 function mobileAction(action, pressed) {
+  if (runner.deathRemaining > 0) return;
+  if (runner.jumpscareRemaining > 0) return;
+  if (runner.escapeActive && (runner.escapeEntering !== null || action === 'throw')) return;
+  if (pressed && runner.paused && !runner.crashed && !isStartMenuOpen()) runner.play();
+  if (pressed) resumeGameAudio();
   if (action === 'run') {
     runner.sprintKeyHeld = pressed;
     if (!pressed) {
@@ -2743,7 +3148,7 @@ mobileControls.querySelectorAll('[data-control]').forEach(function(button) {
   button.addEventListener('pointerdown', function(e) {
     e.preventDefault();
     e.stopPropagation();
-    if (runner.crashed || !runner.activated || mobileControls.hidden) return;
+    if ((!runner.escapeActive && (runner.crashed || (!runner.activated && !runner.paused))) || mobileControls.hidden || isStartMenuOpen()) return;
     if (Array.from(mobilePointers.values()).includes(button)) return;
     button.setPointerCapture(e.pointerId);
     mobilePointers.set(e.pointerId, button);
@@ -2766,7 +3171,7 @@ mobileControls.querySelectorAll('[data-control]').forEach(function(button) {
   });
   button.addEventListener('click', function(e) {
     e.stopPropagation();
-    if (e.detail === 0 && runner.activated && !runner.crashed && !mobileControls.hidden) {
+    if (e.detail === 0 && (runner.activated || runner.paused) && !runner.crashed && !mobileControls.hidden && !isStartMenuOpen()) {
       mobileAction(button.dataset.control, true);
       mobileAction(button.dataset.control, false);
     }
@@ -2774,16 +3179,19 @@ mobileControls.querySelectorAll('[data-control]').forEach(function(button) {
 });
 window.addEventListener('blur', resetMobileControls);
 window.addEventListener('resize', resetMobileControls);
+document.addEventListener('visibilitychange', resetMobileControls);
 
 function showGameOverScreen(won, score) {
+  document.body.classList.remove('escape-scene');
+  document.body.classList.remove('critical-scene');
   document.getElementById('game-hud').hidden = true;
   mobileControls.hidden = true;
   gameOverScreen.classList.toggle('is-victory', won);
   document.getElementById('result-label').textContent = won ? 'VITÓRIA' : 'DERROTA';
   document.getElementById('game-over-title').textContent =
-    won ? 'VOCÊ VENCEU O VÍRUS. MAS SOBREVIVER NÃO DEVERIA SER UM PRIVILÉGIO.' : 'O VIROCRATA-19 TE PEGOU!';
+    won ? 'VOCÊ ENCONTROU A SAÍDA.' : 'O VIROCRATA-19 TE PEGOU!';
   document.getElementById('result-message').textContent = won ?
-    'Quantos ainda precisam morrer para a saúde virar prioridade do governo?' :
+    'O corredor ficou para trás. Pela primeira vez, você pode respirar.' :
     'Use as vacinas e a corrida para escapar na próxima tentativa.';
   document.getElementById('result-score').textContent = 'PONTUAÇÃO: ' + score;
   document.getElementById('result-score').hidden = runner.gameMode !== 'infinite';
@@ -2793,6 +3201,8 @@ function showGameOverScreen(won, score) {
 }
 
 function hideGameOverScreen() {
+  document.getElementById('mobile-run').textContent = '→ CORRER';
+  document.body.classList.remove('escape-scene');
   gameOverScreen.classList.add('is-hidden');
   mobileControls.hidden = false;
 }
@@ -2805,6 +3215,7 @@ function startFromMenu(mode) {
   if (!runner.audioContext) {
     runner.loadSounds();
   }
+  resumeGameAudio();
   runner.activated = true;
   runner.paused = false;
   runner.time = 0;
@@ -2822,6 +3233,12 @@ function isStartMenuOpen() {
   if (window.normalIntro && window.normalIntro.active) return true;
   var menu = document.getElementById('start-screen');
   return menu && !menu.classList.contains('is-hidden');
+}
+
+function resumeGameAudio() {
+  if (runner.audioContext && runner.audioContext.state === 'suspended') {
+    runner.audioContext.resume().catch(function() {});
+  }
 }
 
 document.getElementById('dev-form').addEventListener('submit', function(e) {
@@ -2849,6 +3266,9 @@ for (var modeButtonIndex = 0; modeButtonIndex < modeButtons.length;
   modeButtonIndex++) {
   modeButtons[modeButtonIndex].addEventListener('click', function(e) {
     e.stopPropagation();
+    // Unlock audio during the user's gesture, before the narrative transition.
+    if (!runner.audioContext) runner.loadSounds();
+    resumeGameAudio();
     if (this.getAttribute('data-game-mode') === 'dev') {
       devDialog.showModal();
       devPassword.focus();
@@ -2870,6 +3290,10 @@ restartButton.addEventListener('click', function(e) {
 
 menuButton.addEventListener('click', function(e) {
   e.stopPropagation();
+  returnToMenu();
+});
+
+function returnToMenu() {
   runner.gameMode = 'normal';
   runner.restart();
   runner.stop();
@@ -2877,4 +3301,4 @@ menuButton.addEventListener('click', function(e) {
   startScreen.classList.remove('is-hidden');
   document.getElementById('game-hud').hidden = true;
   mobileControls.hidden = true;
-});
+}

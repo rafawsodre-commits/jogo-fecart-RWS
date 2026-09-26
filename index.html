@@ -2,13 +2,22 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Hospitaxa: corra pelo hospital, desvie dos obstáculos e enfrente o Virocrata-19.">
   <title>Hospitaxa</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=VT323&display=swap">
 </head>
 <body>
+  <div id="virocrata-death" hidden role="img" aria-label="Virocrata-19 derrotado">
+    <canvas id="virocrata-death-camera"></canvas>
+  </div>
+  <img id="transformation-impact" alt="" hidden aria-hidden="true">
+  <div id="critical-jumpscare" hidden aria-hidden="true">
+    <img id="critical-jumpscare-image" alt="">
+  </div>
+  <div id="escape-light" hidden aria-hidden="true"></div>
+  <p id="escape-status" class="intro-sr-only" role="status"></p>
   <div id="game-hud" class="game-hud" hidden aria-label="Estado da partida">
     <div class="hud-panel hud-player">
     <div class="hud-group" title="Fôlego disponível para correr">
@@ -105,8 +114,6 @@
         </div>
       </form>
     </dialog>
-<div id="main-frame-error" class="interstitial-wrapper" jstcache="0">
-
     <section id="game-over-screen" class="start-screen game-over-screen is-hidden"
       aria-labelledby="game-over-title">
       <div class="start-card game-over-card">
@@ -125,15 +132,22 @@
       </div>
     </section>
 
+<div id="main-frame-error" class="interstitial-wrapper" jstcache="0">
     <div id="offline-resources" jstcache="0">
     <img id="vaccine-yellow" src="vacina_amarela.gif" alt="">
     <img id="vaccine-blue" src="vacinas_azul.gif" alt="">
     <img id="vaccine-green" src="seringa_vermelha_v.gif" alt="">
     <img id="clone-sprite" src="images/cara-malefico-sprites.png" alt="">
+    <img id="hyper-clone-sprite" src="images/hiper-malefico-sprites.png" alt="">
+    <img id="exit-door-sprite" src="images/porta-automatica-sprites.png?v=2" alt="">
+    <img id="death-sprite" src="images/virocrata-death-sprites.png" alt="">
+    <img id="virocrata-remains" src="corpoM.png" alt="">
+    <img id="exit-player-sprite" src="images/paciente-saida-sprites.png" alt="">
     <img id="gulosin-sprite" src="images/paciente-sprites.png" alt="">
     <img id="paciente-shield-sprite" src="images/paciente-usando-va-sprites.png" alt="">
     <img id="paciente-throw-sprite" src="images/paciente-throw-sprites.png" alt="">
     <img id="corridor-scenery" src="Cenario.png" alt="">
+    <img id="corridor-one-shot" src="one_shot.png" alt="">
     <img id="wall-picture" src="quadro_deco.png" alt="">
     <img id="obstacle-wheelchair" src="OBSLOW1.png" alt="">
     <img id="obstacle-virus" src="OBSLOW3.png" alt="">
@@ -165,11 +179,12 @@
   </div>
 </div>
   <div id="mobile-controls" class="mobile-controls" hidden aria-label="Controles do jogo">
-    <button type="button" class="mobile-control" data-control="jump">↑ PULAR</button>
+    <p class="mobile-tip">Segure CORRER para acelerar. Na horizontal, você vê mais do caminho.</p>
     <div class="mobile-actions">
-      <button type="button" class="mobile-control" data-control="run">→ CORRER</button>
-      <button type="button" class="mobile-control" data-control="throw">← LANÇAR</button>
+      <button type="button" class="mobile-control" data-control="jump">↑ PULAR</button>
+      <button id="mobile-run" type="button" class="mobile-control" data-control="run">→ CORRER</button>
     </div>
+    <button type="button" class="mobile-control" data-control="throw">← LANÇAR</button>
   </div>
   <script src="game.js"></script>
   <script src="intro.js"></script>
